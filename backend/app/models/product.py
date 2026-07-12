@@ -98,7 +98,12 @@ class ChannelCommission(Base):
     id: Mapped[str] = mapped_column(UUID(as_uuid=False), primary_key=True, default=_uuid)
     channel_id: Mapped[str] = mapped_column(UUID(as_uuid=False), ForeignKey("channels.id"), nullable=False)
     commission_type: Mapped[CommissionType] = mapped_column(
-        Enum(CommissionType, name="commission_type"), nullable=False
+        Enum(
+            CommissionType,
+            name="commission_type",
+            values_callable=lambda enum_cls: [e.value for e in enum_cls],
+        ),
+        nullable=False,
     )
     value: Mapped[Decimal] = mapped_column(Numeric(12, 4), nullable=False)  # % (0-100) or flat currency amount
     is_current: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)

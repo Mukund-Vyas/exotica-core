@@ -1,0 +1,58 @@
+@import url("https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&display=swap");
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  @apply bg-ivory text-ink font-sans antialiased;
+  font-feature-settings: "tnum" 1;
+}
+
+* {
+  @apply border-taupe-light;
+}
+
+/* Visible keyboard focus everywhere — accessibility floor, not an afterthought */
+:focus-visible {
+  outline: 2px solid theme("colors.plum.DEFAULT");
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+.num {
+  font-variant-numeric: tabular-nums;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    transition-duration: 0.001ms !important;
+  }
+}
+
+/* Ledger-rule signature: a thin repeating hairline used on the sidebar and
+   card headers, evoking the ruled columns of the account book this system
+   replaces — the one recurring visual motif, used sparingly. */
+.ledger-rule {
+  background-image: repeating-linear-gradient(
+    to bottom,
+    theme("colors.plum.dark") 0,
+    theme("colors.plum.dark") 1px,
+    transparent 1px,
+    transparent 8px
+  );
+  width: 1px;
+}

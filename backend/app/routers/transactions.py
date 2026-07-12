@@ -46,16 +46,20 @@ async def create_purchase(
 
 @router.get("/purchases/", response_model=Page[PurchaseRead])
 async def list_purchases(
+    vendor_id: str | None = None,
     pagination: PaginationParams = Depends(pagination_params),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_permission("purchases:read")),
 ) -> Page[PurchaseRead]:
-    total = (await db.execute(select(func.count()).select_from(Purchase))).scalar_one()
+    query = select(Purchase)
+    if vendor_id:
+        query = query.where(Purchase.vendor_id == vendor_id)
+
+    total = (await db.execute(select(func.count()).select_from(query.subquery()))).scalar_one()
     rows = (
         (
             await db.execute(
-                select(Purchase)
-                .order_by(Purchase.purchase_date.desc())
+                query.order_by(Purchase.purchase_date.desc())
                 .limit(pagination.limit)
                 .offset(pagination.offset)
             )
@@ -100,6 +104,7 @@ async def create_bulk_orders(
 @router.get("/orders/", response_model=Page[OrderRead])
 async def list_orders(
     channel_id: str | None = None,
+    party_id: str | None = None,
     date_from: date | None = None,
     date_to: date | None = None,
     pagination: PaginationParams = Depends(pagination_params),
@@ -109,6 +114,8 @@ async def list_orders(
     query = select(Order)
     if channel_id:
         query = query.where(Order.channel_id == channel_id)
+    if party_id:
+        query = query.where(Order.party_id == party_id)
     if date_from:
         query = query.where(Order.order_date >= date_from)
     if date_to:
@@ -156,25 +163,26 @@ async def create_return(
 
 @router.get("/receivables/", response_model=Page[ReceivableRead])
 async def list_receivables(
+    party_id: str | None = None,
     pagination: PaginationParams = Depends(pagination_params),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_permission("receivables:read")),
 ) -> Page[ReceivableRead]:
-    total = (await db.execute(select(func.count()).select_from(Receivable))).scalar_one()
+    query = select(Receivable, Order.party_id, Order.party_name).join(Order, Order.id == Receivable.order_id)
+    if party_id:
+        query = query.where(Order.party_id == party_id)
+
+    total = (await db.execute(select(func.count()).select_from(query.subquery()))).scalar_one()
     rows = (
-        (
-            await db.execute(
-                select(Receivable)
-                .order_by(Receivable.due_date.asc())
-                .limit(pagination.limit)
-                .offset(pagination.offset)
-            )
-        )
-        .scalars()
-        .all()
-    )
+        await db.execute(query.order_by(Receivable.due_date.asc()).limit(pagination.limit).offset(pagination.offset))
+    ).all()
     return Page(
-        items=[ReceivableRead.model_validate(r) for r in rows],
+        items=[
+            ReceivableRead.model_validate(
+                {**receivable.__dict__, "party_id": row_party_id, "party_name": party_name}
+            )
+            for receivable, row_party_id, party_name in rows
+        ],
         total=total,
         limit=pagination.limit,
         offset=pagination.offset,
@@ -184,11 +192,12 @@ async def list_receivables(
 @router.get("/receivables/aging", response_model=ReceivablesAgingReport)
 async def receivables_aging(
     as_of: date | None = None,
+    party_id: str | None = None,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_permission("receivables:read")),
 ) -> ReceivablesAgingReport:
     """FR-F3 — total outstanding shown prominently at the top level of the response."""
-    return await receivables.get_receivables_aging(db, as_of)
+    return await receivables.get_receivables_aging(db, as_of, party_id)
 
 
 @router.post("/receivables/{receivable_id}/payments", response_model=PaymentRead, status_code=201)

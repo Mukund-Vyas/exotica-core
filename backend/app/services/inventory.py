@@ -20,6 +20,7 @@ from app.core.exceptions import NotFoundError
 from app.models.product import SKU
 from app.models.transaction import Purchase, PurchaseItem
 from app.models.user import User
+from app.models.vendor import Vendor
 from app.schemas.transaction import PurchaseCreate
 
 
@@ -48,8 +49,13 @@ async def record_purchase(db: AsyncSession, payload: PurchaseCreate, current_use
     recalculates WAC, increases stock, then releases the lock — items across SKUs don't
     block each other, but two purchases hitting the *same* SKU serialize correctly.
     """
+    vendor = (await db.execute(select(Vendor).where(Vendor.id == payload.vendor_id))).scalar_one_or_none()
+    if vendor is None:
+        raise NotFoundError(f"Vendor {payload.vendor_id} not found")
+
     purchase = Purchase(
-        vendor=payload.vendor,
+        vendor_id=vendor.id,
+        vendor=vendor.name,  # write-once snapshot, see models/vendor.py
         purchase_date=payload.purchase_date,
         created_by_id=current_user.id,
     )

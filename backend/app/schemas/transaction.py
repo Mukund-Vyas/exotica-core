@@ -17,7 +17,7 @@ class PurchaseItemCreate(BaseModel):
 
 
 class PurchaseCreate(BaseModel):
-    vendor: str = Field(min_length=1, max_length=200)
+    vendor_id: str = Field(description="Vendor master reference (app.services.vendors)")
     purchase_date: date
     items: list[PurchaseItemCreate] = Field(min_length=1)
 
@@ -35,6 +35,7 @@ class PurchaseItemRead(BaseModel):
 class PurchaseRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: str
+    vendor_id: str | None
     vendor: str
     purchase_date: date
     created_by_id: str
@@ -70,7 +71,10 @@ class OrderCreate(BaseModel):
 
     # B2B only
     payment_term: PaymentTerm | None = None
-    party_name: str | None = None
+    party_id: str | None = Field(
+        default=None,
+        description="Party master reference (app.services.parties) — required when payment_term is 'credit'",
+    )
     due_date: date | None = None
 
     allow_negative_stock: bool = Field(
@@ -105,6 +109,7 @@ class OrderRead(BaseModel):
     channel_id: str
     order_date: date
     payment_term: PaymentTerm | None
+    party_id: str | None
     party_name: str | None
     due_date: date | None
     created_by_id: str
@@ -182,6 +187,8 @@ class ReceivableRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: str
     order_id: str
+    party_id: str | None = None
+    party_name: str | None = None
     amount_total: Decimal
     amount_outstanding: Decimal
     due_date: date
@@ -192,6 +199,7 @@ class ReceivableRead(BaseModel):
 class ReceivableAgingRow(BaseModel):
     receivable_id: str
     order_id: str
+    party_id: str | None
     party_name: str | None
     amount_outstanding: Decimal
     due_date: date

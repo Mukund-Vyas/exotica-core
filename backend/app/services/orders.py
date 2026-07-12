@@ -18,6 +18,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import AppError, ConflictError, NotFoundError
+from app.models.party import Party
 from app.models.product import SKU
 from app.models.transaction import Order, OrderItem, PaymentTerm, Receivable, ReceivableStatus
 from app.models.user import User
@@ -40,11 +41,25 @@ async def _create_order_inner(db: AsyncSession, payload: OrderCreate, current_us
             detail="due_date is required when payment_term is 'credit'",
         )
 
+    party: Party | None = None
+    if payload.payment_term == PaymentTerm.CREDIT and payload.party_id is None:
+        # A credit order with no party attribution can't be collected against
+        # later — the receivable would have nothing to filter/chase by.
+        raise AppError(
+            code="party_required",
+            detail="party_id is required when payment_term is 'credit'",
+        )
+    if payload.party_id is not None:
+        party = (await db.execute(select(Party).where(Party.id == payload.party_id))).scalar_one_or_none()
+        if party is None:
+            raise NotFoundError(f"Party {payload.party_id} not found")
+
     order = Order(
         channel_id=payload.channel_id,
         order_date=payload.order_date,
         payment_term=payload.payment_term,
-        party_name=payload.party_name,
+        party_id=party.id if party else None,
+        party_name=party.name if party else None,  # write-once snapshot, see models/party.py
         due_date=payload.due_date,
         created_by_id=current_user.id,
     )

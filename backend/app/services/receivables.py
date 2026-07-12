@@ -66,23 +66,28 @@ def _aging_bucket(days_overdue: int) -> str:
     return "60+ Days"
 
 
-async def get_receivables_aging(db: AsyncSession, as_of: date | None = None) -> ReceivablesAgingReport:
+async def get_receivables_aging(
+    db: AsyncSession, as_of: date | None = None, party_id: str | None = None
+) -> ReceivablesAgingReport:
     as_of = as_of or date.today()
-    result = await db.execute(
-        select(Receivable, Order.party_name)
+    query = (
+        select(Receivable, Order.party_id, Order.party_name)
         .join(Order, Order.id == Receivable.order_id)
         .where(Receivable.status == ReceivableStatus.OPEN, Receivable.amount_outstanding > 0)
-        .order_by(Receivable.due_date.asc())
     )
+    if party_id:
+        query = query.where(Order.party_id == party_id)
+    result = await db.execute(query.order_by(Receivable.due_date.asc()))
 
     rows: list[ReceivableAgingRow] = []
     total_outstanding = Decimal("0")
-    for receivable, party_name in result.all():
+    for receivable, row_party_id, party_name in result.all():
         days_overdue = (as_of - receivable.due_date).days
         rows.append(
             ReceivableAgingRow(
                 receivable_id=receivable.id,
                 order_id=receivable.order_id,
+                party_id=row_party_id,
                 party_name=party_name,
                 amount_outstanding=receivable.amount_outstanding,
                 due_date=receivable.due_date,

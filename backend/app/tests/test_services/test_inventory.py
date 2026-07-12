@@ -6,6 +6,7 @@ import pytest
 
 from app.core.db import AsyncSessionLocal
 from app.models.product import SKU
+from app.models.vendor import Vendor
 from app.schemas.transaction import PurchaseCreate, PurchaseItemCreate
 from app.services.inventory import calculate_weighted_avg_cost, record_purchase
 
@@ -26,13 +27,13 @@ def test_weighted_avg_cost_from_zero_stock():
 
 
 @pytest.mark.asyncio
-async def test_record_purchase_updates_stock_and_wac(db_session, owner_user):
+async def test_record_purchase_updates_stock_and_wac(db_session, owner_user, vendor):
     sku = SKU(id="sku-1", code="X1", name="n", category="c", size_variant="s")
     db_session.add(sku)
     await db_session.flush()
 
     payload = PurchaseCreate(
-        vendor="Acme Textiles",
+        vendor_id=vendor.id,
         purchase_date="2026-07-01",
         items=[PurchaseItemCreate(sku_id=sku.id, quantity=100, unit_cost=Decimal("200.00"))],
     )
@@ -42,7 +43,7 @@ async def test_record_purchase_updates_stock_and_wac(db_session, owner_user):
     assert sku.current_avg_cost == Decimal("200.0000")
 
     payload2 = PurchaseCreate(
-        vendor="Acme Textiles",
+        vendor_id=vendor.id,
         purchase_date="2026-07-02",
         items=[PurchaseItemCreate(sku_id=sku.id, quantity=50, unit_cost=Decimal("260.00"))],
     )
@@ -60,12 +61,14 @@ async def test_concurrent_purchases_on_same_sku_serialize_correctly(owner_user):
     async with AsyncSessionLocal() as setup_db:
         sku = SKU(id="sku-race", code="RACE1", name="n", category="c", size_variant="s")
         setup_db.add(sku)
+        race_vendor = Vendor(id="vendor-race", name="Race Vendor", created_by_id=owner_user.id)
+        setup_db.add(race_vendor)
         await setup_db.commit()
 
     async def do_purchase(qty: int, cost: str):
         async with AsyncSessionLocal() as db:
             payload = PurchaseCreate(
-                vendor="V",
+                vendor_id="vendor-race",
                 purchase_date="2026-07-01",
                 items=[PurchaseItemCreate(sku_id="sku-race", quantity=qty, unit_cost=Decimal(cost))],
             )

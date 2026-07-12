@@ -9,6 +9,8 @@ from app.models.product import (  # noqa: F401
     CommissionType,
     SKU,
 )
+from app.models.party import Party  # noqa: F401
+from app.models.vendor import Vendor  # noqa: F401
 from app.models.settings import SystemSetting  # noqa: F401
 from app.models.transaction import (  # noqa: F401
     Order,
@@ -29,6 +31,8 @@ __all__ = [
     "ChannelPrice",
     "CommissionType",
     "SKU",
+    "Party",
+    "Vendor",
     "SystemSetting",
     "Order",
     "OrderItem",

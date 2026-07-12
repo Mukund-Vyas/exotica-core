@@ -24,6 +24,8 @@ import pytest_asyncio  # noqa: E402
 from app.core.db import AsyncSessionLocal, Base, engine  # noqa: E402
 from app.core.security import hash_password  # noqa: E402
 from app.models.product import Channel  # noqa: E402
+from app.models.party import Party  # noqa: E402
+from app.models.vendor import Vendor  # noqa: E402
 from app.models.user import Permission, Role, RolePermission, User  # noqa: E402
 
 ALL_PERMISSION_CODES = [
@@ -42,6 +44,10 @@ ALL_PERMISSION_CODES = [
     "reports:view",
     "settings:read",
     "settings:write",
+    "parties:read",
+    "parties:write",
+    "vendors:read",
+    "vendors:write",
 ]
 
 
@@ -90,3 +96,19 @@ async def channel(db_session) -> Channel:
     db_session.add(ch)
     await db_session.flush()
     return ch
+
+
+@pytest_asyncio.fixture
+async def party(db_session, owner_user) -> Party:
+    p = Party(id=str(uuid.uuid4()), name="Acme Retail", created_by_id=owner_user.id)
+    db_session.add(p)
+    await db_session.flush()
+    return p
+
+
+@pytest_asyncio.fixture
+async def vendor(db_session, owner_user) -> Vendor:
+    v = Vendor(id=str(uuid.uuid4()), name="Acme Textiles", created_by_id=owner_user.id)
+    db_session.add(v)
+    await db_session.flush()
+    return v

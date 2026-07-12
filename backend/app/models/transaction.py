@@ -50,6 +50,13 @@ class Purchase(Base):
     __tablename__ = "purchases"
 
     id: Mapped[str] = mapped_column(UUID(as_uuid=False), primary_key=True, default=_uuid)
+    # vendor_id is the real FK, used for filtering/dedup (see app/models/vendor.py).
+    # vendor is a write-once snapshot of Vendor.name at purchase time (same
+    # pattern as resulting_avg_cost etc.) so a later vendor rename doesn't
+    # rewrite historical purchases/reports. Nullable only to accommodate
+    # pre-existing free-text rows from before the Vendor master existed; every
+    # purchase recorded going forward always has both set (see PurchaseCreate).
+    vendor_id: Mapped[str | None] = mapped_column(UUID(as_uuid=False), ForeignKey("vendors.id"), nullable=True)
     vendor: Mapped[str] = mapped_column(String(200), nullable=False)
     purchase_date: Mapped[date] = mapped_column(Date, nullable=False)
     created_by_id: Mapped[str] = mapped_column(UUID(as_uuid=False), ForeignKey("users.id"), nullable=False)
@@ -88,9 +95,21 @@ class Order(Base):
     order_date: Mapped[date] = mapped_column(Date, nullable=False)
 
     # B2B-only fields (FR-F1); null/ignored for other channels
+    #
+    # values_callable is required here: SQLAlchemy's default Enum binding sends
+    # the Python member *name* ("CREDIT") to Postgres, but the DB enum type was
+    # created (0001_initial_schema) with the member *values* ("credit"). Without
+    # this, any credit order 500s on insert with "invalid input value for enum
+    # payment_term".
     payment_term: Mapped[PaymentTerm | None] = mapped_column(
-        Enum(PaymentTerm, name="payment_term"), nullable=True
+        Enum(PaymentTerm, name="payment_term", values_callable=lambda enum_cls: [e.value for e in enum_cls]),
+        nullable=True,
     )
+    # party_id is the real FK, used for filtering/dedup. party_name is a
+    # write-once snapshot of Party.name at order time (same pattern as
+    # selling_price_at_sale etc.) so renaming a party later doesn't rewrite
+    # historical orders/reports.
+    party_id: Mapped[str | None] = mapped_column(UUID(as_uuid=False), ForeignKey("parties.id"), nullable=True)
     party_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
     due_date: Mapped[date | None] = mapped_column(Date, nullable=True)
 
@@ -165,7 +184,13 @@ class Receivable(Base):
     amount_outstanding: Mapped[Decimal] = mapped_column(Numeric(14, 2), nullable=False)
     due_date: Mapped[date] = mapped_column(Date, nullable=False)
     status: Mapped[ReceivableStatus] = mapped_column(
-        Enum(ReceivableStatus, name="receivable_status"), default=ReceivableStatus.OPEN, nullable=False
+        Enum(
+            ReceivableStatus,
+            name="receivable_status",
+            values_callable=lambda enum_cls: [e.value for e in enum_cls],
+        ),
+        default=ReceivableStatus.OPEN,
+        nullable=False,
     )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
