@@ -78,3 +78,58 @@ class AuditLogRow(BaseModel):
     amount: Decimal | None
     created_by_id: str
     created_at: datetime
+
+
+# ============================================================================
+# Epic G — Inventory Intelligence (BRD Addendum)
+# ============================================================================
+
+AgingBucket = Literal["0-30", "31-60", "61-90", "90+"]
+
+
+class InventoryAgingRow(BaseModel):
+    sku_id: str
+    sku_code: str
+    sku_name: str
+    category: str
+    stock_qty: int
+    last_purchase_date: date  # falls back to SKU creation date if never repurchased (FR-G1)
+    days_since_last_purchase: int
+    aging_bucket: AgingBucket
+
+
+class InventoryAgingReport(BaseModel):
+    rows: list[InventoryAgingRow]
+
+
+class FastMoverRow(BaseModel):
+    sku_id: str
+    sku_code: str
+    sku_name: str
+    units_sold_in_window: int
+    average_daily_sales: Decimal
+    current_stock_qty: int
+    days_of_stock_remaining: Decimal | None  # null when ADS is 0 (can't divide)
+
+
+class FastMoversReport(BaseModel):
+    window_days: int
+    top_percentile: int
+    rows: list[FastMoverRow]  # sorted by units_sold_in_window desc, already filtered to the top P%
+
+
+class PurchaseTriggerRow(BaseModel):
+    sku_id: str
+    sku_code: str
+    sku_name: str
+    current_stock_qty: int
+    average_daily_sales: Decimal
+    days_of_stock_remaining: Decimal | None
+    reorder_point: Decimal
+    suggested_purchase_qty: int
+    last_vendor_name: str | None  # from Purchase history; null if never purchased
+
+
+class PurchaseTriggersReport(BaseModel):
+    rows: list[PurchaseTriggerRow]
+    total_suggested_purchase_value: Decimal  # sum(suggested_qty * current_avg_cost) across all rows

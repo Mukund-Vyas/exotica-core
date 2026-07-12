@@ -9,6 +9,7 @@ import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
 import SKUList from "./pages/skus/SKUList";
 import SKUForm from "./pages/skus/SKUForm";
+import BulkUpload from "./pages/skus/BulkUpload";
 import VendorList from "./pages/vendors/VendorList";
 import PartyList from "./pages/parties/PartyList";
 import PurchaseEntry from "./pages/purchases/PurchaseEntry";
@@ -25,6 +26,9 @@ import InventoryValuation from "./pages/reports/InventoryValuation";
 import DeadStock from "./pages/reports/DeadStock";
 import Performance from "./pages/reports/Performance";
 import AuditLog from "./pages/reports/AuditLog";
+import InventoryAging from "./pages/reports/InventoryAging";
+import FastMovers from "./pages/reports/FastMovers";
+import PurchaseTriggers from "./pages/reports/PurchaseTriggers";
 import SystemSettings from "./pages/settings/SystemSettings";
 
 function ProtectedRoute({ children }) {
@@ -70,6 +74,7 @@ export default function App() {
 
         <Route path="skus" element={<SKUList />} />
         <Route path="skus/new" element={<SKUForm />} />
+        <Route path="skus/bulk-upload" element={<BulkUpload />} />
         <Route path="skus/:skuId" element={<SKUForm />} />
 
         <Route path="vendors" element={<VendorList />} />
@@ -93,6 +98,9 @@ export default function App() {
         <Route path="reports/dead-stock" element={<DeadStock />} />
         <Route path="reports/performance" element={<Performance />} />
         <Route path="reports/audit-log" element={<AuditLog />} />
+        <Route path="reports/inventory-aging" element={<InventoryAging />} />
+        <Route path="reports/fast-movers" element={<FastMovers />} />
+        <Route path="reports/purchase-triggers" element={<PurchaseTriggers />} />
 
         <Route path="settings" element={<SystemSettings />} />
       </Route>

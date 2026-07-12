@@ -1,15 +1,20 @@
-from fastapi import APIRouter, Depends
+import csv
+import io
+
+from fastapi import APIRouter, Depends, File, UploadFile
+from fastapi.responses import StreamingResponse
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db import get_db
-from app.core.exceptions import ConflictError, NotFoundError
+from app.core.exceptions import AppError, ConflictError, NotFoundError
 from app.dependencies.pagination import PaginationParams, pagination_params
 from app.dependencies.permissions import require_permission
 from app.models.product import SKU, Channel
 from app.models.user import User
 from app.schemas.common import Page
 from app.schemas.product import (
+    BulkSKUUploadResult,
     ChannelCommissionCreate,
     ChannelCommissionRead,
     ChannelPriceCreate,
@@ -24,6 +29,12 @@ from app.services.pricing import (
     get_current_price,
     set_channel_commission,
     set_channel_price,
+)
+from app.services.products import (
+    MAX_ROWS,
+    TEMPLATE_EXAMPLE_ROW,
+    TEMPLATE_HEADERS,
+    bulk_create_skus,
 )
 
 router = APIRouter(prefix="/api/v1", tags=["products"])
@@ -118,6 +129,52 @@ async def update_sku(
     await db.flush()
     await db.refresh(sku)
     return sku
+
+
+# --- Bulk SKU upload (FR-A4) ---
+
+
+@router.get("/skus/bulk/template")
+async def download_sku_bulk_template(
+    current_user: User = Depends(require_permission("skus:write")),
+) -> StreamingResponse:
+    """Downloadable CSV template with correct headers + one example row —
+    reduces format-mismatch errors before they happen (Addendum 2, Section 1)."""
+    buffer = io.StringIO()
+    writer = csv.writer(buffer)
+    writer.writerow(TEMPLATE_HEADERS)
+    writer.writerow(TEMPLATE_EXAMPLE_ROW)
+    buffer.seek(0)
+    return StreamingResponse(
+        iter([buffer.getvalue()]),
+        media_type="text/csv",
+        headers={"Content-Disposition": "attachment; filename=exotica_sku_upload_template.csv"},
+    )
+
+
+@router.post("/skus/bulk", response_model=BulkSKUUploadResult)
+async def upload_skus_bulk(
+    file: UploadFile = File(...),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_permission("skus:write")),
+) -> BulkSKUUploadResult:
+    raw = await file.read()
+    try:
+        text = raw.decode("utf-8-sig")  # -sig strips a BOM if Excel added one on export
+    except UnicodeDecodeError:
+        raise AppError(code="invalid_file", detail="File is not valid UTF-8 text. Please export as CSV (UTF-8).")
+
+    reader = csv.DictReader(io.StringIO(text))
+    rows = list(reader)
+    if not rows:
+        raise AppError(code="empty_file", detail="The uploaded file has no data rows.")
+    if len(rows) > MAX_ROWS:
+        raise AppError(
+            code="upload_too_large",
+            detail=f"File has {len(rows)} rows, which exceeds the {MAX_ROWS}-row limit. Split it into smaller files.",
+        )
+
+    return await bulk_create_skus(db, rows, current_user)
 
 
 # --- Channel pricing (FR-A2) ---

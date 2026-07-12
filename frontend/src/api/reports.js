@@ -37,3 +37,20 @@ export async function getAuditLog({ dateFrom, dateTo, limit = 50, offset = 0 }) 
   });
   return data;
 }
+
+// --- Epic G: Inventory Intelligence (BRD Addendum) ---
+
+export async function getInventoryAging() {
+  const { data } = await client.get("/reports/inventory-aging");
+  return data;
+}
+
+export async function getFastMovers() {
+  const { data } = await client.get("/reports/fast-movers");
+  return data;
+}
+
+export async function getPurchaseTriggers() {
+  const { data } = await client.get("/reports/purchase-triggers");
+  return data;
+}

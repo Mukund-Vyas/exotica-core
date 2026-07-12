@@ -11,8 +11,17 @@ const NAV_SECTIONS = [
     label: "Master Data",
     items: [
       { to: "/skus", label: "SKUs" },
+      { to: "/skus/bulk-upload", label: "Bulk Upload" },
       { to: "/vendors", label: "Vendors" },
       { to: "/parties", label: "Parties" },
+    ],
+  },
+  {
+    label: "Inventory Intelligence",
+    items: [
+      { to: "/reports/inventory-aging", label: "Inventory Aging" },
+      { to: "/reports/fast-movers", label: "Fast Movers" },
+      { to: "/reports/purchase-triggers", label: "Purchase Triggers" },
     ],
   },
   {

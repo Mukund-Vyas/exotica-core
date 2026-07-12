@@ -60,9 +60,14 @@ export default function SKUList() {
           <h1 className="font-display text-2xl font-semibold text-ink">SKUs</h1>
           <p className="text-sm text-taupe">Master product list — every purchase and sale references these.</p>
         </div>
-        <Link to="/skus/new">
-          <Button>+ New SKU</Button>
-        </Link>
+        <div className="flex gap-2">
+          <Link to="/skus/bulk-upload">
+            <Button variant="secondary">Bulk upload</Button>
+          </Link>
+          <Link to="/skus/new">
+            <Button>+ New SKU</Button>
+          </Link>
+        </div>
       </div>
 
       <label className="mb-3 flex w-fit items-center gap-2 text-sm text-ink">

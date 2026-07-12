@@ -61,3 +61,29 @@ export async function setChannelCommission(channelId, commissionType, value) {
   });
   return data;
 }
+
+// --- Bulk SKU upload (FR-A4) ---
+
+export async function downloadSkuBulkTemplate() {
+  // The template endpoint requires auth like everything else, so a plain
+  // <a href> wouldn't carry the in-memory bearer token — fetch via the
+  // authenticated client and trigger the download as a blob instead.
+  const response = await client.get("/skus/bulk/template", { responseType: "blob" });
+  const url = window.URL.createObjectURL(new Blob([response.data], { type: "text/csv" }));
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = "exotica_sku_upload_template.csv";
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.URL.revokeObjectURL(url);
+}
+
+export async function uploadSkusBulk(file) {
+  const formData = new FormData();
+  formData.append("file", file);
+  const { data } = await client.post("/skus/bulk", formData, {
+    headers: { "Content-Type": "multipart/form-data" },
+  });
+  return data; // BulkSKUUploadResult
+}

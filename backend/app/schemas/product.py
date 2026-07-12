@@ -25,6 +25,7 @@ class SKUCreate(BaseModel):
     name: str = Field(min_length=1, max_length=200)
     category: str = Field(min_length=1, max_length=100)
     size_variant: str = Field(min_length=1, max_length=50)
+    lead_time_days: int | None = Field(default=None, ge=0)
 
 
 class SKUUpdate(BaseModel):
@@ -32,6 +33,7 @@ class SKUUpdate(BaseModel):
     category: str | None = None
     size_variant: str | None = None
     is_active: bool | None = None  # discontinue without deleting
+    lead_time_days: int | None = None
 
 
 class SKURead(BaseModel):
@@ -42,10 +44,31 @@ class SKURead(BaseModel):
     category: str
     size_variant: str
     is_active: bool
+    lead_time_days: int | None
     current_stock_qty: int
     current_avg_cost: Decimal
     created_at: datetime
     updated_at: datetime
+
+
+# --- Bulk SKU upload (FR-A4) ---
+# Partial success, not all-or-nothing — deliberately different from Bulk Order
+# Entry, which is atomic. SKU rows are independent of each other, so one bad
+# row shouldn't block the other 199 valid ones (BRD Addendum 2, Section 1).
+
+
+class BulkSKURowError(BaseModel):
+    row_number: int  # 1-indexed, matching what a spreadsheet user sees (header excluded)
+    code: str | None  # best-effort — may be missing/blank on the bad row itself
+    error_code: str
+    detail: str
+
+
+class BulkSKUUploadResult(BaseModel):
+    created_count: int
+    failed_count: int
+    created_skus: list[SKURead]
+    errors: list[BulkSKURowError]
 
 
 # --- ChannelPrice (FR-A2) ---

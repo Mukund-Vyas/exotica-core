@@ -9,6 +9,11 @@ import { getErrorInfo } from "../../utils/errorCodes";
 
 const SETTING_LABELS = {
   dead_stock_window: "Dead stock window (days)",
+  ads_window_days: "ADS calculation window (days)",
+  fast_mover_top_percentile: "Fast-mover cutoff (top % by units sold)",
+  safety_buffer_days: "Safety buffer (days)",
+  target_coverage_days: "Target stock coverage (days)",
+  default_lead_time_days: "Default lead time (days, when a SKU leaves it blank)",
 };
 
 function SettingsList() {

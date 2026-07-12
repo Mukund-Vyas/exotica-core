@@ -60,6 +60,12 @@ class SKU(Base):
     size_variant: Mapped[str] = mapped_column(String(50), nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)  # discontinue, don't delete
 
+    # Epic G (Inventory Intelligence) — how long a reorder for this specific
+    # SKU takes to arrive from its vendor. Nullable: falls back to the
+    # `default_lead_time_days` SystemSetting when blank, so leaving it empty
+    # is never a hard blocker to creating a SKU (BRD Addendum, Section 5).
+    lead_time_days: Mapped[int | None] = mapped_column(nullable=True)
+
     # Running totals, maintained by services/inventory.py under row-level lock.
     current_stock_qty: Mapped[int] = mapped_column(default=0, nullable=False)
     current_avg_cost: Mapped[Decimal] = mapped_column(Numeric(12, 4), default=Decimal("0"), nullable=False)

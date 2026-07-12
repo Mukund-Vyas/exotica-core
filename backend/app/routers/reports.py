@@ -13,12 +13,15 @@ from app.schemas.reports import (
     AuditLogRow,
     ChannelPnLRow,
     DeadStockReport,
+    FastMoversReport,
+    InventoryAgingReport,
     InventoryValuationReport,
     PerformanceRow,
+    PurchaseTriggersReport,
     RankMetric,
     SKUPnLRow,
 )
-from app.services import reports as reports_service
+from app.services import inventory_intelligence, reports as reports_service
 
 router = APIRouter(prefix="/api/v1/reports", tags=["reports"])
 
@@ -91,3 +94,49 @@ async def audit_log(
         db, date_from, date_to, pagination.limit, pagination.offset
     )
     return Page(items=rows, total=total, limit=pagination.limit, offset=pagination.offset)
+
+
+# ============================================================================
+# Epic G — Inventory Intelligence (BRD Addendum)
+# ============================================================================
+
+
+@router.get("/inventory-aging", response_model=InventoryAgingReport)
+async def inventory_aging(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_permission("reports:view")),
+) -> InventoryAgingReport:
+    """FR-G1 — days since last restock, bucketed. A proxy for replenishment
+    staleness, not true lot-level FIFO aging (this system uses weighted-average
+    costing, not batch tracking)."""
+    return await inventory_intelligence.get_inventory_aging_report(db)
+
+
+@router.get("/fast-movers", response_model=FastMoversReport)
+async def fast_movers(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_permission("reports:view")),
+) -> FastMoversReport:
+    """FR-G2 — velocity-based: top P% of active SKUs-with-sales by units sold
+    in the ADS window, independent of current stock level."""
+    return await inventory_intelligence.get_fast_movers_report(
+        db, settings.ads_window_days, settings.fast_mover_top_percentile
+    )
+
+
+@router.get("/purchase-triggers", response_model=PurchaseTriggersReport)
+async def purchase_triggers(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_permission("reports:view")),
+) -> PurchaseTriggersReport:
+    """FR-G3 — fast-moving AND past its reorder point. A high-velocity SKU with
+    plenty of stock won't trigger; a slow-moving SKU that's merely low won't
+    trigger either — only the intersection does."""
+    return await inventory_intelligence.get_purchase_triggers_report(
+        db,
+        settings.ads_window_days,
+        settings.fast_mover_top_percentile,
+        settings.safety_buffer_days,
+        settings.target_coverage_days,
+        settings.default_lead_time_days,
+    )

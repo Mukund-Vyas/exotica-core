@@ -47,6 +47,15 @@ class Settings(BaseSettings):
     # --- Business defaults (bootstrap only — live value lives in SystemSetting, see Section 1.4) ---
     dead_stock_window_days: int = 45
 
+    # Epic G (Inventory Intelligence) bootstrap defaults — live values are the
+    # SystemSetting rows seeded by 0005_epic_g_inventory_intelligence.py;
+    # these only matter if that migration somehow hasn't run yet.
+    ads_window_days: int = 30
+    fast_mover_top_percentile: int = 20
+    safety_buffer_days: int = 7
+    target_coverage_days: int = 30
+    default_lead_time_days: int = 7
+
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
     @field_validator("database_url", "database_url_direct")

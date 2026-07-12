@@ -24,6 +24,10 @@ const schema = z.object({
   category: z.string().min(1, "Category is required").max(100),
   size_variant: z.string().min(1, "Size / variant is required").max(50),
   is_active: z.boolean().optional(),
+  lead_time_days: z
+    .union([z.string().length(0), z.coerce.number().int().min(0, "Must be 0 or more")])
+    .optional()
+    .transform((v) => (v === "" || v === undefined ? null : v)),
 });
 
 export default function SKUForm() {
@@ -92,6 +96,13 @@ export default function SKUForm() {
           </Field>
           <Field label="Size / Variant" required error={errors.size_variant?.message}>
             <Input {...register("size_variant")} placeholder="e.g. 32B — Black" />
+          </Field>
+          <Field
+            label="Lead time (days)"
+            error={errors.lead_time_days?.message}
+            hint="How long a reorder takes to arrive from this SKU's vendor. Leave blank to use the site-wide default (Settings)."
+          >
+            <Input type="number" min="0" {...register("lead_time_days")} placeholder="e.g. 7" />
           </Field>
           {isEdit && (
             <div className="sm:col-span-2">
