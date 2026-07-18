@@ -39,7 +39,7 @@ export default function SkuPicker({ value, onChange, placeholder = "Search SKU c
             <button
               type="button"
               key={sku.id}
-              className="flex w-full flex-col items-start px-3 py-2 text-left text-sm hover:bg-plum-50"
+              className="flex w-full flex-col items-start px-3 py-2 text-left text-sm hover:bg-brand-50"
               onClick={() => {
                 onChange?.(sku);
                 setQuery(`${sku.code} — ${sku.name}`);

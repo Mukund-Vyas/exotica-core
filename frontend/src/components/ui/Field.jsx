@@ -25,7 +25,7 @@ export function Field({ label, error, hint, required, children, className = "" }
 }
 
 const baseInput =
-  "w-full rounded-sm border bg-white px-3 py-2 text-sm text-ink placeholder:text-taupe focus:outline-none focus:ring-2 focus:ring-plum/40 disabled:bg-ivory disabled:text-taupe";
+  "w-full rounded-sm border bg-white px-3 py-2 text-sm text-ink placeholder:text-taupe focus:outline-none focus:ring-2 focus:ring-brand/40 disabled:bg-ivory disabled:text-taupe";
 
 export const Input = forwardRef(function Input({ error, className = "", ...props }, ref) {
   return (
@@ -61,7 +61,7 @@ export function Textarea({ error, className = "", ...props }) {
 export function Checkbox({ label, className = "", ...props }) {
   return (
     <label className={`flex items-center gap-2 text-sm text-ink ${className}`}>
-      <input type="checkbox" className="h-4 w-4 rounded border-taupe-light text-plum focus:ring-plum/40" {...props} />
+      <input type="checkbox" className="h-4 w-4 rounded border-taupe-light text-brand focus:ring-brand/40" {...props} />
       {label}
     </label>
   );

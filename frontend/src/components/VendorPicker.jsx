@@ -69,7 +69,7 @@ export default function VendorPicker({ value, onChange, placeholder = "Search or
             <button
               type="button"
               key={vendor.id}
-              className="block w-full px-3 py-2 text-left text-sm hover:bg-plum-50"
+              className="block w-full px-3 py-2 text-left text-sm hover:bg-brand-50"
               onClick={() => {
                 onChange?.(vendor);
                 setQuery(vendor.name);
@@ -83,7 +83,7 @@ export default function VendorPicker({ value, onChange, placeholder = "Search or
             <button
               type="button"
               disabled={createMutation.isPending}
-              className="flex w-full items-center gap-1.5 border-t border-taupe-light px-3 py-2 text-left text-sm text-plum hover:bg-plum-50 disabled:opacity-60"
+              className="flex w-full items-center gap-1.5 border-t border-taupe-light px-3 py-2 text-left text-sm text-brand hover:bg-brand-50 disabled:opacity-60"
               onClick={() => {
                 setCreateError("");
                 createMutation.mutate(trimmedQuery);

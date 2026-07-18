@@ -50,7 +50,7 @@ export default function FastMovers() {
         <>
           <Card className="mb-6">
             <p className="text-xs uppercase tracking-wide text-taupe">Fast-Moving SKUs</p>
-            <p className="font-display text-2xl font-semibold text-plum num">{data?.rows?.length ?? 0}</p>
+            <p className="font-display text-2xl font-semibold text-brand num">{data?.rows?.length ?? 0}</p>
           </Card>
           <DataTable
             columns={columns}

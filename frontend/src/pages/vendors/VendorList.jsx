@@ -100,7 +100,7 @@ export default function VendorList() {
           type="checkbox"
           checked={activeOnly}
           onChange={(e) => setActiveOnly(e.target.checked)}
-          className="h-4 w-4 rounded border-taupe-light text-plum"
+          className="h-4 w-4 rounded border-taupe-light text-brand"
         />
         Active only
       </label>

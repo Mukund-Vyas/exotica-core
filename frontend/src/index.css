@@ -25,7 +25,7 @@ body {
 
 /* Visible keyboard focus everywhere — accessibility floor, not an afterthought */
 :focus-visible {
-  outline: 2px solid theme("colors.plum.DEFAULT");
+  outline: 2px solid theme("colors.brand.DEFAULT");
   outline-offset: 2px;
   border-radius: 2px;
 }
@@ -49,8 +49,8 @@ body {
 .ledger-rule {
   background-image: repeating-linear-gradient(
     to bottom,
-    theme("colors.plum.dark") 0,
-    theme("colors.plum.dark") 1px,
+    theme("colors.brand.dark") 0,
+    theme("colors.brand.dark") 1px,
     transparent 1px,
     transparent 8px
   );

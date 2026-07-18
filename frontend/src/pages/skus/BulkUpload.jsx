@@ -69,7 +69,7 @@ export default function BulkUpload() {
           <h1 className="font-display text-2xl font-semibold text-ink">Bulk SKU upload</h1>
           <p className="text-sm text-taupe">Create many SKUs at once from a CSV file (FR-A4).</p>
         </div>
-        <Link to="/skus" className="text-sm text-plum underline">
+        <Link to="/skus" className="text-sm text-brand underline">
           ← Back to SKUs
         </Link>
       </div>

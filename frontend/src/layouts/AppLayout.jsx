@@ -64,7 +64,7 @@ function NavItem({ to, label, end }) {
       end={end}
       className={({ isActive }) =>
         `block rounded-sm px-3 py-1.5 text-sm transition-colors ${
-          isActive ? "bg-plum text-white font-medium" : "text-taupe-light hover:bg-white/5 hover:text-white"
+          isActive ? "bg-brand text-white font-medium" : "text-taupe-light hover:bg-white/5 hover:text-white"
         }`
       }
     >
@@ -79,8 +79,8 @@ export default function AppLayout() {
 
   const Sidebar = (
     <nav className="flex h-full flex-col gap-6 overflow-y-auto px-4 py-6">
-      <div className="flex items-center gap-3 px-1">
-        <div className="ledger-rule h-7" />
+      <div className="flex items-center gap-2.5 px-1">
+        <img src="/logo-mark.png" alt="" aria-hidden="true" className="h-9 w-9 shrink-0" />
         <div>
           <p className="font-display text-xl font-semibold text-white">Exotica</p>
           <p className="text-[10px] uppercase tracking-wide text-taupe-light">Core</p>
@@ -133,7 +133,10 @@ export default function AppLayout() {
               <path d="M3 6h14M3 10h14M3 14h14" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
             </svg>
           </button>
-          <p className="font-display text-lg font-semibold text-ink">Exotica</p>
+          <div className="flex items-center gap-2">
+            <img src="/logo-mark.png" alt="" aria-hidden="true" className="h-6 w-6" />
+            <p className="font-display text-lg font-semibold text-ink">Exotica</p>
+          </div>
           <div className="w-8" />
         </header>
         <main className="flex-1 px-4 py-6 md:px-8 md:py-8">

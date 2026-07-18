@@ -58,7 +58,7 @@ export default function PurchaseTriggers() {
             </Card>
             <Card>
               <p className="text-xs uppercase tracking-wide text-taupe">Suggested Purchase Value</p>
-              <p className="font-display text-2xl font-semibold text-plum num">
+              <p className="font-display text-2xl font-semibold text-brand num">
                 {formatCurrency(data?.total_suggested_purchase_value)}
               </p>
             </Card>

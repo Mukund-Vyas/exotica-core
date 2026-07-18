@@ -165,7 +165,7 @@ export default function OrderEntry() {
           </div>
 
           {isB2B && (
-            <div className="rounded-sm border border-plum-50 bg-plum-50/40 p-3">
+            <div className="rounded-sm border border-brand-50 bg-brand-50/40 p-3">
               <p className="mb-3 text-sm font-medium text-ink">B2B payment terms (FR-F1)</p>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                 <Field label="Terms">

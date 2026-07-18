@@ -30,6 +30,7 @@ import InventoryAging from "./pages/reports/InventoryAging";
 import FastMovers from "./pages/reports/FastMovers";
 import PurchaseTriggers from "./pages/reports/PurchaseTriggers";
 import SystemSettings from "./pages/settings/SystemSettings";
+import NotFound from "./pages/NotFound";
 
 function ProtectedRoute({ children }) {
   const { status } = useAuth();
@@ -103,9 +104,9 @@ export default function App() {
         <Route path="reports/purchase-triggers" element={<PurchaseTriggers />} />
 
         <Route path="settings" element={<SystemSettings />} />
-      </Route>
 
-      <Route path="*" element={<Navigate to="/" replace />} />
+        <Route path="*" element={<NotFound />} />
+      </Route>
     </Routes>
   );
 }

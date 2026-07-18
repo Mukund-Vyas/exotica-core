@@ -27,7 +27,7 @@ function DashboardCard({ title, isLoading, children, linkTo, linkLabel }) {
     <Card title={title}>
       {isLoading ? <Loader /> : children}
       {linkTo && (
-        <Link to={linkTo} className="mt-3 inline-block text-sm text-plum underline">
+        <Link to={linkTo} className="mt-3 inline-block text-sm text-brand underline">
           {linkLabel} →
         </Link>
       )}
@@ -81,7 +81,7 @@ export default function Dashboard() {
         >
           {bestChannel ? (
             <div>
-              <p className="font-display text-2xl font-semibold text-plum">{bestChannel.channel_name}</p>
+              <p className="font-display text-2xl font-semibold text-brand">{bestChannel.channel_name}</p>
               <p className="mt-1 text-sm text-taupe">
                 Net profit {formatCurrency(bestChannel.net_profit)} · Margin{" "}
                 {formatPercent(bestChannel.margin_pct)}
@@ -110,7 +110,7 @@ export default function Dashboard() {
           linkTo="/reports/inventory-valuation"
           linkLabel="View inventory valuation"
         >
-          <p className="font-display text-2xl font-semibold text-plum">
+          <p className="font-display text-2xl font-semibold text-brand">
             {formatCurrency(valuationQuery.data?.total_stock_value)}
           </p>
           <p className="mt-1 text-sm text-taupe">Capital currently tied up in stock, at weighted-avg cost.</p>
@@ -190,7 +190,7 @@ export default function Dashboard() {
         >
           {topSeller ? (
             <div>
-              <p className="font-display text-2xl font-semibold text-plum">{topSeller.sku_code}</p>
+              <p className="font-display text-2xl font-semibold text-brand">{topSeller.sku_code}</p>
               <p className="mt-1 text-sm text-taupe">
                 {topSeller.sku_name} · {formatCurrency(topSeller.revenue)} revenue ·{" "}
                 {formatNumber(topSeller.quantity_sold)} sold
@@ -203,19 +203,19 @@ export default function Dashboard() {
       </div>
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <Link to="/orders/new" className="rounded-md border border-taupe-light bg-white p-4 shadow-card hover:border-plum">
+        <Link to="/orders/new" className="rounded-md border border-taupe-light bg-white p-4 shadow-card hover:border-brand">
           <p className="font-display font-semibold text-ink">Log an order</p>
           <p className="text-sm text-taupe">Record today's sales</p>
         </Link>
-        <Link to="/orders/bulk" className="rounded-md border border-taupe-light bg-white p-4 shadow-card hover:border-plum">
+        <Link to="/orders/bulk" className="rounded-md border border-taupe-light bg-white p-4 shadow-card hover:border-brand">
           <p className="font-display font-semibold text-ink">Bulk order entry</p>
           <p className="text-sm text-taupe">Log several lines fast</p>
         </Link>
-        <Link to="/purchases/new" className="rounded-md border border-taupe-light bg-white p-4 shadow-card hover:border-plum">
+        <Link to="/purchases/new" className="rounded-md border border-taupe-light bg-white p-4 shadow-card hover:border-brand">
           <p className="font-display font-semibold text-ink">Record a purchase</p>
           <p className="text-sm text-taupe">Stock in with cost price</p>
         </Link>
-        <Link to="/skus/bulk-upload" className="rounded-md border border-taupe-light bg-white p-4 shadow-card hover:border-plum">
+        <Link to="/skus/bulk-upload" className="rounded-md border border-taupe-light bg-white p-4 shadow-card hover:border-brand">
           <p className="font-display font-semibold text-ink">Bulk upload SKUs</p>
           <p className="text-sm text-taupe">Create many at once via CSV</p>
         </Link>

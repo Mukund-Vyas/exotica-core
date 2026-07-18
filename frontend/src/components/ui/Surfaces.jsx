@@ -17,7 +17,7 @@ const BADGE_TONES = {
   success: "bg-success-bg text-success",
   danger: "bg-danger-bg text-danger",
   warning: "bg-warning-bg text-warning",
-  plum: "bg-plum-50 text-plum-dark",
+  brand: "bg-brand-50 text-brand-dark",
 };
 
 export function Badge({ tone = "neutral", icon, children, className = "" }) {
@@ -34,7 +34,7 @@ export function Badge({ tone = "neutral", icon, children, className = "" }) {
 export function Loader({ label = "Loading…" }) {
   return (
     <div className="flex items-center justify-center gap-2 py-12 text-sm text-taupe" role="status">
-      <svg className="h-4 w-4 animate-spin text-plum" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <svg className="h-4 w-4 animate-spin text-brand" viewBox="0 0 24 24" fill="none" aria-hidden="true">
         <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
         <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
       </svg>
@@ -46,10 +46,10 @@ export function Loader({ label = "Loading…" }) {
 export function EmptyState({ title, message, action }) {
   return (
     <div className="flex flex-col items-center justify-center gap-2 py-14 text-center">
-      <div className="mb-1 h-10 w-10 rounded-full bg-plum-50 flex items-center justify-center">
+      <div className="mb-1 h-10 w-10 rounded-full bg-brand-50 flex items-center justify-center text-brand-dark">
         <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden="true">
-          <rect x="2" y="4" width="14" height="10" rx="1.5" stroke="#6B2D5C" strokeWidth="1.4" />
-          <path d="M2 7h14" stroke="#6B2D5C" strokeWidth="1.4" />
+          <rect x="2" y="4" width="14" height="10" rx="1.5" stroke="currentColor" strokeWidth="1.4" />
+          <path d="M2 7h14" stroke="currentColor" strokeWidth="1.4" />
         </svg>
       </div>
       <p className="font-display text-base font-semibold text-ink">{title}</p>

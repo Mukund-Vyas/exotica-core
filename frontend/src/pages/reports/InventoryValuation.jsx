@@ -33,7 +33,7 @@ export default function InventoryValuation() {
         <>
           <Card className="mb-6">
             <p className="text-xs uppercase tracking-wide text-taupe">Total Stock Value</p>
-            <p className="font-display text-2xl font-semibold text-plum num">{formatCurrency(data?.total_stock_value)}</p>
+            <p className="font-display text-2xl font-semibold text-brand num">{formatCurrency(data?.total_stock_value)}</p>
           </Card>
           <DataTable
             columns={columns}

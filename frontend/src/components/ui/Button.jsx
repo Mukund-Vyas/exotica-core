@@ -1,8 +1,8 @@
 const VARIANTS = {
-  primary: "bg-plum text-white hover:bg-plum-dark disabled:bg-taupe-light disabled:text-taupe",
-  secondary: "bg-white text-ink border border-taupe-light hover:bg-plum-50 disabled:opacity-50",
+  primary: "bg-brand text-white hover:bg-brand-dark disabled:bg-taupe-light disabled:text-taupe",
+  secondary: "bg-white text-ink border border-taupe-light hover:bg-brand-50 disabled:opacity-50",
   danger: "bg-danger text-white hover:opacity-90 disabled:opacity-50",
-  ghost: "bg-transparent text-plum hover:bg-plum-50 disabled:opacity-50",
+  ghost: "bg-transparent text-brand hover:bg-brand-50 disabled:opacity-50",
 };
 
 const SIZES = {

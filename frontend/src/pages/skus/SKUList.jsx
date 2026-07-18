@@ -21,7 +21,7 @@ export default function SKUList() {
         accessorKey: "code",
         header: "Code",
         cell: (ctx) => (
-          <Link to={`/skus/${ctx.row.original.id}`} className="font-medium text-plum hover:underline">
+          <Link to={`/skus/${ctx.row.original.id}`} className="font-medium text-brand hover:underline">
             {ctx.getValue()}
           </Link>
         ),
@@ -75,7 +75,7 @@ export default function SKUList() {
           type="checkbox"
           checked={activeOnly}
           onChange={(e) => setActiveOnly(e.target.checked)}
-          className="h-4 w-4 rounded border-taupe-light text-plum"
+          className="h-4 w-4 rounded border-taupe-light text-brand"
         />
         Active only
       </label>

@@ -5,11 +5,11 @@ export default {
     extend: {
       colors: {
         ink: "#1C1523",
-        plum: {
-          DEFAULT: "#6B2D5C",
-          light: "#8A4478",
-          dark: "#4A1F40",
-          50: "#F7EFF4",
+        brand: {
+          DEFAULT: "#A80E58",
+          light: "#FF197D",
+          dark: "#7A0A40",
+          50: "#FDECF3",
         },
         ivory: "#FAF7F4",
         taupe: {
