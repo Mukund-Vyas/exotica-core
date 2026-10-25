@@ -19,3 +19,7 @@ class UserRead(BaseModel):
     username: str
     is_active: bool
     role_id: str
+    # Exposed so the UI can show/hide controls by permission (FR-E1). The server
+    # still enforces every permission on its own; this is purely for UX.
+    role_name: str | None = None
+    permission_codes: list[str] = []

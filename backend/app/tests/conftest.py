@@ -19,6 +19,7 @@ os.environ.setdefault("DATABASE_URL_DIRECT", "sqlite+aiosqlite:///:memory:")
 os.environ.setdefault("JWT_SECRET_KEY", "test-secret-key-not-for-production")
 os.environ.setdefault("CORS_ALLOWED_ORIGINS_RAW", "http://localhost:3000")
 
+import pytest  # noqa: E402,F401
 import pytest_asyncio  # noqa: E402
 
 from app.core.db import AsyncSessionLocal, Base, engine  # noqa: E402
@@ -112,3 +113,11 @@ async def vendor(db_session, owner_user) -> Vendor:
     db_session.add(v)
     await db_session.flush()
     return v
+
+
+@pytest_asyncio.fixture
+async def b2b_channel(db_session) -> Channel:
+    ch = Channel(id=str(uuid.uuid4()), code="b2b", name="B2B")
+    db_session.add(ch)
+    await db_session.flush()
+    return ch

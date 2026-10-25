@@ -1,9 +1,10 @@
 from datetime import datetime
 from decimal import Decimal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.models.product import CommissionType
+from app.schemas.types import Price, UUIDStr, trimmed
 
 
 # --- Channel ---
@@ -21,19 +22,32 @@ class ChannelRead(BaseModel):
 
 
 class SKUCreate(BaseModel):
-    code: str = Field(min_length=1, max_length=50)
-    name: str = Field(min_length=1, max_length=200)
-    category: str = Field(min_length=1, max_length=100)
-    size_variant: str = Field(min_length=1, max_length=50)
-    lead_time_days: int | None = Field(default=None, ge=0)
+    code: trimmed(50)
+    name: trimmed(200)
+    category: trimmed(100)
+    size_variant: trimmed(50)
+    lead_time_days: int | None = Field(default=None, ge=0, le=365)
 
 
 class SKUUpdate(BaseModel):
-    name: str | None = None
-    category: str | None = None
-    size_variant: str | None = None
+    """PATCH body. Only fields actually sent are applied (``exclude_unset``).
+
+    ``lead_time_days`` may be sent as null to clear it back to "use the site-wide
+    default"; the NOT NULL columns may not be nulled out or blanked.
+    """
+
+    name: trimmed(200) | None = None
+    category: trimmed(100) | None = None
+    size_variant: trimmed(50) | None = None
     is_active: bool | None = None  # discontinue without deleting
-    lead_time_days: int | None = None
+    lead_time_days: int | None = Field(default=None, ge=0, le=365)
+
+    @model_validator(mode="after")
+    def _no_null_for_required_columns(self) -> "SKUUpdate":
+        for field in ("name", "category", "size_variant", "is_active"):
+            if field in self.model_fields_set and getattr(self, field) is None:
+                raise ValueError(f"{field} cannot be null")
+        return self
 
 
 class SKURead(BaseModel):
@@ -49,6 +63,9 @@ class SKURead(BaseModel):
     current_avg_cost: Decimal
     created_at: datetime
     updated_at: datetime
+    # Only populated when listing with ?vendor_id=: that vendor's own code/name.
+    vendor_sku_code: str | None = None
+    vendor_product_name: str | None = None
 
 
 # --- Bulk SKU upload (FR-A4) ---
@@ -77,9 +94,9 @@ class BulkSKUUploadResult(BaseModel):
 
 
 class ChannelPriceCreate(BaseModel):
-    sku_id: str
-    channel_id: str
-    price: Decimal = Field(gt=0)
+    sku_id: UUIDStr
+    channel_id: UUIDStr
+    price: Price
 
 
 class ChannelPriceRead(BaseModel):
@@ -97,9 +114,16 @@ class ChannelPriceRead(BaseModel):
 
 
 class ChannelCommissionCreate(BaseModel):
-    channel_id: str
+    channel_id: UUIDStr
     commission_type: CommissionType
-    value: Decimal = Field(ge=0)
+    # Percentage (0-100) or a flat rupee amount per unit; see the check below.
+    value: Decimal = Field(ge=0, max_digits=10, decimal_places=4, allow_inf_nan=False)
+
+    @model_validator(mode="after")
+    def _percentage_within_range(self) -> "ChannelCommissionCreate":
+        if self.commission_type == CommissionType.PERCENTAGE and self.value > 100:
+            raise ValueError("a percentage commission cannot exceed 100")
+        return self
 
 
 class ChannelCommissionRead(BaseModel):

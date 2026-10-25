@@ -1,4 +1,5 @@
 """FR-B3 return entry — stock replenishment and revenue/profit reversal."""
+import uuid
 from decimal import Decimal
 
 import pytest
@@ -13,7 +14,7 @@ from app.services.returns import record_return
 
 @pytest.mark.asyncio
 async def test_return_with_order_reference_prorates_snapshot_values(db_session, owner_user, channel):
-    sku = SKU(id="sku-1", code="X1", name="n", category="c", size_variant="s", current_stock_qty=100)
+    sku = SKU(id=str(uuid.uuid4()), code="X1", name="n", category="c", size_variant="s", current_stock_qty=100)
     db_session.add(sku)
     await db_session.flush()
     sku.current_avg_cost = Decimal("200.0000")
@@ -56,7 +57,7 @@ async def test_return_with_order_reference_prorates_snapshot_values(db_session, 
 
 @pytest.mark.asyncio
 async def test_over_return_is_rejected(db_session, owner_user, channel):
-    sku = SKU(id="sku-1", code="X1", name="n", category="c", size_variant="s", current_stock_qty=100)
+    sku = SKU(id=str(uuid.uuid4()), code="X1", name="n", category="c", size_variant="s", current_stock_qty=100)
     db_session.add(sku)
     await db_session.flush()
     await set_channel_price(db_session, sku.id, channel.id, Decimal("500.00"), owner_user)

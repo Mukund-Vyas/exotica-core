@@ -19,9 +19,9 @@ export async function createBulkOrders(orders) {
   const { data } = await client.post("/orders/bulk", { orders });
   return data; // BulkOrderResult { orders, errors }
 }
-export async function listOrders({ channelId, partyId, dateFrom, dateTo, limit = 50, offset = 0 } = {}) {
+export async function listOrders({ channelId, partyId, skuId, dateFrom, dateTo, limit = 50, offset = 0 } = {}) {
   const { data } = await client.get("/orders/", {
-    params: { channel_id: channelId, party_id: partyId, date_from: dateFrom, date_to: dateTo, limit, offset },
+    params: { channel_id: channelId, party_id: partyId, sku_id: skuId, date_from: dateFrom, date_to: dateTo, limit, offset },
   });
   return data;
 }
@@ -33,8 +33,8 @@ export async function createReturn(payload) {
 }
 
 // --- Receivables & Payments (Epic F) ---
-export async function listReceivables({ partyId, limit = 50, offset = 0 } = {}) {
-  const { data } = await client.get("/receivables/", { params: { party_id: partyId, limit, offset } });
+export async function listReceivables({ partyId, status, limit = 50, offset = 0 } = {}) {
+  const { data } = await client.get("/receivables/", { params: { party_id: partyId, status, limit, offset } });
   return data;
 }
 export async function getReceivablesAging(asOf, partyId) {

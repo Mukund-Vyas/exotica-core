@@ -77,6 +77,10 @@ class PurchaseItem(Base):
     line_total: Mapped[Decimal] = mapped_column(Numeric(14, 2), nullable=False)
     # snapshot of the SKU's weighted-avg cost *after* this purchase is applied
     resulting_avg_cost: Mapped[Decimal] = mapped_column(Numeric(12, 4), nullable=False)
+    # write-once snapshot of the vendor's own code for this SKU at purchase time
+    # (null when no mapping existed), so invoices can be reconciled later even if
+    # the mapping is edited or removed.
+    vendor_sku_code: Mapped[str | None] = mapped_column(String(100), nullable=True)
 
     purchase: Mapped["Purchase"] = relationship(back_populates="items")
 

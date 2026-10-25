@@ -4,18 +4,25 @@ Async SQLAlchemy engine + session factory.
 Uses the pooled Neon connection for app runtime traffic (Implementation Plan Section 1.1).
 Async-first throughout — never mix sync SQLAlchemy calls into this app (Section 9, Async discipline).
 """
+import os
 from collections.abc import AsyncGenerator
 
 from sqlalchemy import event
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase
+from sqlalchemy.pool import NullPool
 
 from app.core.config import settings
+
+# Tests run each case on its own event loop; asyncpg connections can't be reused
+# across loops, so the test suite opts out of pooling with DB_NULL_POOL=1.
+_engine_kwargs = {"poolclass": NullPool} if os.getenv("DB_NULL_POOL") else {}
 
 engine = create_async_engine(
     settings.database_url,
     pool_pre_ping=True,
     future=True,
+    **_engine_kwargs,
 )
 
 if engine.sync_engine.dialect.name == "sqlite":

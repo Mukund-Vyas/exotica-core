@@ -31,6 +31,7 @@ class InventoryValuationRow(BaseModel):
     sku_id: str
     sku_code: str
     sku_name: str
+    is_active: bool = True
     stock_qty: int
     avg_cost: Decimal
     stock_value: Decimal
@@ -45,6 +46,7 @@ class DeadStockRow(BaseModel):
     sku_id: str
     sku_code: str
     sku_name: str
+    is_active: bool = True
     stock_qty: int
     avg_cost: Decimal
     capital_blocked: Decimal
@@ -67,7 +69,7 @@ class PerformanceRow(BaseModel):
     margin_pct: Decimal | None
 
 
-RankMetric = Literal["revenue", "quantity_sold", "margin_pct"]
+RankMetric = Literal["revenue", "quantity_sold", "net_profit", "margin_pct"]
 
 
 class AuditLogRow(BaseModel):
@@ -76,7 +78,10 @@ class AuditLogRow(BaseModel):
     entry_date: date
     description: str
     amount: Decimal | None
+    channel_id: str | None = None
+    channel_name: str | None = None
     created_by_id: str
+    created_by: str | None = None  # username
     created_at: datetime
 
 

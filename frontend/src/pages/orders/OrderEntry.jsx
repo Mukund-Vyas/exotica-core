@@ -9,11 +9,15 @@ import Button from "../../components/ui/Button";
 import Modal from "../../components/ui/Modal";
 import SkuPicker from "../../components/SkuPicker";
 import PartyPicker from "../../components/PartyPicker";
-import { formatCurrency } from "../../utils/currency";
+import { formatCurrency, sumMoney } from "../../utils/currency";
+import { todayISO } from "../../utils/dates";
+import { newKey } from "../../utils/id";
+import { isPositiveInt, isPositiveMoney } from "../../utils/numbers";
+import { invalidateBusinessData } from "../../utils/invalidate";
 import { getErrorInfo } from "../../utils/errorCodes";
 
 function emptyLine() {
-  return { key: crypto.randomUUID(), sku: null, quantity: "", override: "", autoPrice: undefined };
+  return { key: newKey(), sku: null, quantity: "", override: "", autoPrice: undefined };
 }
 
 export default function OrderEntry() {
@@ -22,7 +26,7 @@ export default function OrderEntry() {
   const { data: channels } = useQuery({ queryKey: ["channels"], queryFn: listChannels });
 
   const [channelId, setChannelId] = useState("");
-  const [orderDate, setOrderDate] = useState(new Date().toISOString().slice(0, 10));
+  const [orderDate, setOrderDate] = useState(todayISO());
   const [lines, setLines] = useState([emptyLine()]);
   const [paymentTerm, setPaymentTerm] = useState("paid_immediately");
   const [party, setParty] = useState(null);
@@ -49,15 +53,19 @@ export default function OrderEntry() {
       if (!linesWithSku.length) return;
       const results = await Promise.all(
         linesWithSku.map(async (l) => {
-          const price = await getCurrentChannelPrice(l.sku.id, channelId);
-          return { key: l.key, autoPrice: price?.price ?? null };
+          try {
+            const price = await getCurrentChannelPrice(l.sku.id, channelId);
+            return { key: l.key, autoPrice: price?.price ?? null };
+          } catch {
+            return { key: l.key, autoPrice: undefined, priceError: true };
+          }
         })
       );
       if (cancelled) return;
       setLines((prev) =>
         prev.map((l) => {
           const match = results.find((r) => r.key === l.key);
-          return match ? { ...l, autoPrice: match.autoPrice } : l;
+          return match ? { ...l, autoPrice: match.autoPrice, priceError: !!match.priceError } : l;
         })
       );
     })();
@@ -80,10 +88,17 @@ export default function OrderEntry() {
   }
 
   async function handleSkuChange(key, sku) {
-    updateLine(key, { sku, autoPrice: undefined });
+    updateLine(key, { sku, autoPrice: undefined, priceError: false });
     if (sku && channelId) {
-      const price = await getCurrentChannelPrice(sku.id, channelId);
-      updateLine(key, { autoPrice: price?.price ?? null });
+      try {
+        const price = await getCurrentChannelPrice(sku.id, channelId);
+        // Ignore the answer if the user has since picked a different SKU on this line.
+        setLines((prev) =>
+          prev.map((l) => (l.key === key && l.sku?.id === sku.id ? { ...l, autoPrice: price?.price ?? null } : l))
+        );
+      } catch {
+        updateLine(key, { priceError: true });
+      }
     }
   }
 
@@ -106,7 +121,7 @@ export default function OrderEntry() {
   const mutation = useMutation({
     mutationFn: (payload) => createOrder(payload),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["skus"] });
+      invalidateBusinessData(queryClient);
       navigate("/orders");
     },
     onError: (err) => {
@@ -125,16 +140,32 @@ export default function OrderEntry() {
     if (!orderDate) errs.date = "Date is required.";
     if (isB2B && paymentTerm === "credit" && !party) errs.party = "Select or add a party for credit orders.";
     if (isB2B && paymentTerm === "credit" && !dueDate) errs.dueDate = "Due date is required for credit orders.";
+    else if (isB2B && paymentTerm === "credit" && dueDate < orderDate) errs.dueDate = "Due date can't be before the order date.";
     lines.forEach((l) => {
       if (!l.sku) errs[`${l.key}-sku`] = "Select a SKU.";
-      if (!l.quantity || Number(l.quantity) <= 0) errs[`${l.key}-qty`] = "Quantity must be > 0.";
-      if (l.sku && l.autoPrice === null && !l.override) {
+      if (!isPositiveInt(l.quantity)) errs[`${l.key}-qty`] = "Enter a whole number, 1 or more.";
+      if (l.override && !isPositiveMoney(l.override)) {
+        errs[`${l.key}-price`] = "Enter a price above 0 (max 2 decimals).";
+      } else if (l.sku && l.priceError && !l.override) {
+        errs[`${l.key}-price`] = "Couldn't load the channel price — retry, or enter an override price.";
+      } else if (l.sku && l.autoPrice === null && !l.override) {
         errs[`${l.key}-price`] = "No channel price is set — enter an override price.";
       }
     });
     setFieldErrors(errs);
     return Object.keys(errs).length === 0;
   }
+
+  // Live preview so a mistyped quantity or price is visible before saving.
+  const estimatedTotal = (() => {
+    const priced = lines
+      .map((l) => {
+        const unit = l.override && isPositiveMoney(l.override) ? Number(l.override) : l.autoPrice ? Number(l.autoPrice) : null;
+        return unit !== null && isPositiveInt(l.quantity) ? { amount: unit * Number(l.quantity) } : null;
+      })
+      .filter(Boolean);
+    return { priced: priced.length, amount: sumMoney(priced, "amount") };
+  })();
 
   function handleSubmit(e) {
     e.preventDefault();
@@ -160,13 +191,13 @@ export default function OrderEntry() {
               </Select>
             </Field>
             <Field label="Order date" required error={fieldErrors.date}>
-              <Input type="date" value={orderDate} onChange={(e) => setOrderDate(e.target.value)} />
+              <Input type="date" value={orderDate} max={todayISO()} onChange={(e) => setOrderDate(e.target.value)} />
             </Field>
           </div>
 
           {isB2B && (
             <div className="rounded-sm border border-brand-50 bg-brand-50/40 p-3">
-              <p className="mb-3 text-sm font-medium text-ink">B2B payment terms (FR-F1)</p>
+              <p className="mb-3 text-sm font-medium text-ink">B2B payment terms</p>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                 <Field label="Terms">
                   <Select value={paymentTerm} onChange={(e) => setPaymentTerm(e.target.value)}>
@@ -179,7 +210,7 @@ export default function OrderEntry() {
                 </Field>
                 {paymentTerm === "credit" && (
                   <Field label="Due date" required error={fieldErrors.dueDate}>
-                    <Input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
+                    <Input type="date" value={dueDate} min={orderDate} onChange={(e) => setDueDate(e.target.value)} />
                   </Field>
                 )}
               </div>
@@ -198,6 +229,9 @@ export default function OrderEntry() {
                     <Input
                       type="number"
                       min="1"
+                      step="1"
+                      inputMode="numeric"
+                      aria-label={`Quantity, line ${idx + 1}`}
                       value={line.quantity}
                       onChange={(e) => updateLine(line.key, { quantity: e.target.value })}
                     />
@@ -216,13 +250,23 @@ export default function OrderEntry() {
                     <Input
                       type="number"
                       step="0.01"
+                      min="0.01"
+                      inputMode="decimal"
+                      aria-label={`Price override, line ${idx + 1}`}
                       placeholder={line.autoPrice ? String(line.autoPrice) : "Override"}
                       value={line.override}
                       onChange={(e) => updateLine(line.key, { override: e.target.value })}
                     />
                   </Field>
                   <div className={idx === 0 ? "mt-6" : ""}>
-                    <Button type="button" variant="ghost" size="sm" onClick={() => removeLine(line.key)}>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      disabled={lines.length === 1}
+                      aria-label={`Remove line ${idx + 1}`}
+                      onClick={() => removeLine(line.key)}
+                    >
                       Remove
                     </Button>
                   </div>
@@ -233,6 +277,14 @@ export default function OrderEntry() {
               + Add line
             </Button>
           </div>
+
+          {estimatedTotal.priced > 0 && (
+            <p className="text-sm text-taupe">
+              Order total (before commission):{" "}
+              <span className="num font-semibold text-ink">{formatCurrency(estimatedTotal.amount)}</span>
+              {estimatedTotal.priced < lines.length && " — lines without a price aren’t included yet"}
+            </p>
+          )}
 
           <div>
             <Button type="submit" disabled={mutation.isPending}>

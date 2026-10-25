@@ -4,13 +4,13 @@ import { listChannels } from "../../api/products";
 import { getSkuPnl } from "../../api/reports";
 import DataTable from "../../components/ui/DataTable";
 import { Field, Select, Input } from "../../components/ui/Field";
+import DateRangeFields from "../../components/ui/DateRangeFields";
+import { monthToDateRange, dateRangeError } from "../../utils/dates";
 import SkuPicker from "../../components/SkuPicker";
 import { formatCurrency, formatNumber, formatPercent } from "../../utils/currency";
 
 function defaultRange() {
-  const now = new Date();
-  const from = new Date(now.getFullYear(), now.getMonth(), 1);
-  return { dateFrom: from.toISOString().slice(0, 10), dateTo: now.toISOString().slice(0, 10) };
+  return monthToDateRange();
 }
 
 export default function SkuPnL() {
@@ -24,7 +24,7 @@ export default function SkuPnL() {
   const { data, isLoading } = useQuery({
     queryKey: ["sku-pnl", dateFrom, dateTo, channelId, sku?.id],
     queryFn: () => getSkuPnl({ dateFrom, dateTo, channelId: channelId || undefined, skuId: sku?.id }),
-    enabled: Boolean(dateFrom && dateTo),
+    enabled: Boolean(dateFrom && dateTo) && !dateRangeError(dateFrom, dateTo),
   });
 
   const columns = useMemo(
@@ -35,7 +35,7 @@ export default function SkuPnL() {
       { accessorKey: "revenue", header: "Revenue", cell: (ctx) => <span className="num">{formatCurrency(ctx.getValue())}</span> },
       { accessorKey: "commission", header: "Commission", cell: (ctx) => <span className="num">{formatCurrency(ctx.getValue())}</span> },
       { accessorKey: "cogs", header: "COGS", cell: (ctx) => <span className="num">{formatCurrency(ctx.getValue())}</span> },
-      { accessorKey: "net_profit", header: "Net Profit", cell: (ctx) => <span className="num font-medium">{formatCurrency(ctx.getValue())}</span> },
+      { accessorKey: "net_profit", header: "Net Profit", cell: (ctx) => <span className={`num font-medium ${signClass(ctx.getValue())}`}>{formatCurrency(ctx.getValue())}</span> },
       { accessorKey: "margin_pct", header: "Margin %", cell: (ctx) => <span className="num">{formatPercent(ctx.getValue())}</span> },
     ],
     []
@@ -47,12 +47,7 @@ export default function SkuPnL() {
       <p className="mb-6 text-sm text-taupe">Profitability by product — filter by date range, channel, or a single SKU.</p>
 
       <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-4 sm:max-w-3xl">
-        <Field label="From">
-          <Input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
-        </Field>
-        <Field label="To">
-          <Input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
-        </Field>
+        <DateRangeFields from={dateFrom} to={dateTo} onFromChange={setDateFrom} onToChange={setDateTo} />
         <Field label="Channel">
           <Select value={channelId} onChange={(e) => setChannelId(e.target.value)}>
             <option value="">All channels</option>

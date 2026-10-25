@@ -8,6 +8,7 @@ from app.dependencies.permissions import require_permission
 from app.models.settings import SystemSetting
 from app.models.user import User
 from app.schemas.settings import SystemSettingRead, SystemSettingUpdate
+from app.services.settings import validate_setting_value
 
 router = APIRouter(prefix="/api/v1/settings", tags=["settings"])
 
@@ -27,12 +28,13 @@ async def update_setting(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_permission("settings:write")),
 ) -> SystemSetting:
+    clean_value = validate_setting_value(key, payload.value)
     result = await db.execute(select(SystemSetting).where(SystemSetting.key == key))
     setting = result.scalar_one_or_none()
     if setting is None:
         raise NotFoundError(f"Setting '{key}' not found")
 
-    setting.value = payload.value
+    setting.value = clean_value
     setting.updated_by_id = current_user.id
     await db.flush()
     await db.refresh(setting)

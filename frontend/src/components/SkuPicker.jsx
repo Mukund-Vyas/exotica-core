@@ -1,61 +1,36 @@
-import { useEffect, useRef, useState } from "react";
 import { useSkuSearch } from "../hooks/useSkuSearch";
-import { Input } from "./ui/Field";
+import SearchPicker from "./ui/SearchPicker";
 
-export default function SkuPicker({ value, onChange, placeholder = "Search SKU code or name…", autoFocus }) {
-  const [query, setQuery] = useState(value?.label || "");
-  const [open, setOpen] = useState(false);
-  const boxRef = useRef(null);
-  const { skus, isFetching } = useSkuSearch(query);
+const skuText = (sku) => `${sku.code} — ${sku.name}`;
 
-  useEffect(() => {
-    function onClickOutside(e) {
-      if (boxRef.current && !boxRef.current.contains(e.target)) setOpen(false);
-    }
-    document.addEventListener("mousedown", onClickOutside);
-    return () => document.removeEventListener("mousedown", onClickOutside);
-  }, []);
-
+/** `vendorId` (optional): also search by that vendor's own code/name and show it. */
+export default function SkuPicker({ value, onChange, placeholder = "Search SKU code or name…", autoFocus, vendorId }) {
   return (
-    <div className="relative" ref={boxRef}>
-      <Input
-        autoFocus={autoFocus}
-        value={query}
-        placeholder={placeholder}
-        onChange={(e) => {
-          setQuery(e.target.value);
-          setOpen(true);
-          if (!e.target.value) onChange?.(null);
-        }}
-        onFocus={() => setOpen(true)}
-      />
-      {open && (
-        <div className="absolute z-20 mt-1 max-h-64 w-full overflow-auto rounded-sm border border-taupe-light bg-white shadow-card">
-          {isFetching && <div className="px-3 py-2 text-sm text-taupe">Searching…</div>}
-          {!isFetching && skus.length === 0 && (
-            <div className="px-3 py-2 text-sm text-taupe">No matching SKUs.</div>
+    <SearchPicker
+      value={value}
+      onChange={onChange}
+      placeholder={placeholder}
+      autoFocus={autoFocus}
+      emptyText="No matching SKUs."
+      getText={skuText}
+      useSearch={(q) => {
+        const { skus, isFetching } = useSkuSearch(q, { vendorId });
+        return { items: skus, isFetching };
+      }}
+      renderItem={(sku) => (
+        <>
+          <span className="block font-medium text-ink">{skuText(sku)}</span>
+          {vendorId && sku.vendor_sku_code && (
+            <span className="block text-xs text-brand-dark">
+              Vendor code: <span className="font-medium">{sku.vendor_sku_code}</span>
+              {sku.vendor_product_name ? ` · ${sku.vendor_product_name}` : ""}
+            </span>
           )}
-          {skus.map((sku) => (
-            <button
-              type="button"
-              key={sku.id}
-              className="flex w-full flex-col items-start px-3 py-2 text-left text-sm hover:bg-brand-50"
-              onClick={() => {
-                onChange?.(sku);
-                setQuery(`${sku.code} — ${sku.name}`);
-                setOpen(false);
-              }}
-            >
-              <span className="font-medium text-ink">
-                {sku.code} — {sku.name}
-              </span>
-              <span className="text-xs text-taupe">
-                {sku.category} · {sku.size_variant} · Stock: {sku.current_stock_qty}
-              </span>
-            </button>
-          ))}
-        </div>
+          <span className={`block text-xs ${sku.current_stock_qty <= 0 ? "text-danger" : "text-taupe"}`}>
+            {sku.category} · {sku.size_variant} · {sku.current_stock_qty <= 0 ? "Out of stock" : `Stock: ${sku.current_stock_qty}`}
+          </span>
+        </>
       )}
-    </div>
+    />
   );
 }

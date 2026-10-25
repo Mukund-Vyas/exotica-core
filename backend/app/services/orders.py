@@ -17,21 +17,17 @@ from decimal import Decimal
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from sqlalchemy.exc import SQLAlchemyError
+
 from app.core.exceptions import AppError, ConflictError, NotFoundError
+from app.core.money import money
 from app.models.party import Party
-from app.models.product import SKU
+from app.models.product import Channel
 from app.models.transaction import Order, OrderItem, PaymentTerm, Receivable, ReceivableStatus
 from app.models.user import User
 from app.schemas.transaction import BulkOrderCreate, BulkOrderLineError, BulkOrderResult, OrderCreate
+from app.services.inventory import lock_skus
 from app.services.pricing import calculate_commission, get_current_commission, get_current_price
-
-
-async def _lock_sku(db: AsyncSession, sku_id: str) -> SKU:
-    result = await db.execute(select(SKU).where(SKU.id == sku_id).with_for_update())
-    sku = result.scalar_one_or_none()
-    if sku is None:
-        raise NotFoundError(f"SKU {sku_id} not found")
-    return sku
 
 
 async def _create_order_inner(db: AsyncSession, payload: OrderCreate, current_user: User) -> Order:
@@ -39,6 +35,18 @@ async def _create_order_inner(db: AsyncSession, payload: OrderCreate, current_us
         raise AppError(
             code="due_date_required",
             detail="due_date is required when payment_term is 'credit'",
+        )
+
+    channel = await db.get(Channel, payload.channel_id)
+    if channel is None:
+        raise NotFoundError(f"Channel {payload.channel_id} not found")
+    if not channel.is_active:
+        raise AppError(code="channel_inactive", detail=f"Channel '{channel.name}' is not active.")
+    if payload.payment_term == PaymentTerm.CREDIT and channel.code != "b2b":
+        # FR-F1: credit terms / receivables exist for the B2B channel only.
+        raise AppError(
+            code="credit_b2b_only",
+            detail="Credit terms can only be used on B2B orders.",
         )
 
     party: Party | None = None
@@ -53,6 +61,11 @@ async def _create_order_inner(db: AsyncSession, payload: OrderCreate, current_us
         party = (await db.execute(select(Party).where(Party.id == payload.party_id))).scalar_one_or_none()
         if party is None:
             raise NotFoundError(f"Party {payload.party_id} not found")
+        if not party.is_active:
+            raise AppError(
+                code="party_inactive",
+                detail=f"Party '{party.name}' is inactive. Reactivate it first.",
+            )
 
     order = Order(
         channel_id=payload.channel_id,
@@ -69,8 +82,12 @@ async def _create_order_inner(db: AsyncSession, payload: OrderCreate, current_us
     commission = await get_current_commission(db, payload.channel_id)
     total_revenue = Decimal("0")
 
+    # Lock every SKU up front, in a fixed order, so concurrent multi-line orders
+    # can't deadlock each other (see inventory.lock_skus).
+    locked = await lock_skus(db, [line.sku_id for line in payload.items])
+
     for line in payload.items:
-        sku = await _lock_sku(db, line.sku_id)
+        sku = locked[line.sku_id]
 
         if line.selling_price_override is not None:
             selling_price = line.selling_price_override
@@ -98,9 +115,9 @@ async def _create_order_inner(db: AsyncSession, payload: OrderCreate, current_us
                 code="insufficient_stock",
             )
 
-        revenue = (Decimal(line.quantity) * selling_price).quantize(Decimal("0.01"))
+        revenue = money(Decimal(line.quantity) * selling_price)
         commission_amount = calculate_commission(commission, revenue, line.quantity)
-        cogs = (Decimal(line.quantity) * sku.current_avg_cost).quantize(Decimal("0.01"))
+        cogs = money(Decimal(line.quantity) * sku.current_avg_cost)
         net_profit = revenue - commission_amount - cogs
 
         sku.current_stock_qty -= line.quantity
@@ -162,6 +179,14 @@ async def create_bulk_orders(
                 created.append(order)
         except AppError as exc:
             errors.append(BulkOrderLineError(order_index=order_index, detail=exc.detail))
+        except SQLAlchemyError:
+            # Any unexpected database problem on one order is reported against
+            # that order instead of aborting the whole request with a 500.
+            errors.append(
+                BulkOrderLineError(
+                    order_index=order_index, detail="Could not be saved because of a data problem."
+                )
+            )
 
     if errors:
         await db.rollback()

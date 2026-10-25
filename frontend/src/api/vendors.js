@@ -16,3 +16,8 @@ export async function updateVendor(vendorId, payload) {
   const { data } = await client.patch(`/vendors/${vendorId}`, payload);
   return data;
 }
+
+export async function getVendor(vendorId) {
+  const { data } = await client.get(`/vendors/${vendorId}`);
+  return data;
+}

@@ -1,10 +1,12 @@
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict
+
+from app.schemas.types import trimmed
 
 
 class VendorCreate(BaseModel):
-    name: str = Field(min_length=1, max_length=200)
+    name: trimmed(200)
 
 
 class VendorUpdate(BaseModel):

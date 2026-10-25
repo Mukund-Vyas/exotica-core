@@ -1,6 +1,7 @@
 from datetime import date
+from typing import Literal
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
@@ -9,6 +10,7 @@ from app.dependencies.pagination import PaginationParams, pagination_params
 from app.dependencies.permissions import require_permission
 from app.models.user import User
 from app.schemas.common import Page
+from app.schemas.types import UUIDStr
 from app.schemas.reports import (
     AuditLogRow,
     ChannelPnLRow,
@@ -30,7 +32,7 @@ router = APIRouter(prefix="/api/v1/reports", tags=["reports"])
 async def channel_pnl(
     date_from: date,
     date_to: date,
-    channel_id: str | None = None,
+    channel_id: UUIDStr | None = None,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_permission("reports:view")),
 ) -> list[ChannelPnLRow]:
@@ -41,8 +43,8 @@ async def channel_pnl(
 async def sku_pnl(
     date_from: date,
     date_to: date,
-    channel_id: str | None = None,
-    sku_id: str | None = None,
+    channel_id: UUIDStr | None = None,
+    sku_id: UUIDStr | None = None,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_permission("reports:view")),
 ) -> list[SKUPnLRow]:
@@ -70,9 +72,9 @@ async def performance_ranking(
     date_from: date,
     date_to: date,
     metric: RankMetric = "revenue",
-    channel_id: str | None = None,
+    channel_id: UUIDStr | None = None,
     descending: bool = True,
-    limit: int = 20,
+    limit: int = Query(default=20, ge=1, le=200),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_permission("reports:view")),
 ) -> list[PerformanceRow]:
@@ -86,12 +88,14 @@ async def performance_ranking(
 async def audit_log(
     date_from: date,
     date_to: date,
+    channel_id: UUIDStr | None = None,
+    entry_type: Literal["purchase", "order", "return", "payment"] | None = None,
     pagination: PaginationParams = Depends(pagination_params),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_permission("reports:view")),
 ) -> Page[AuditLogRow]:
     rows, total = await reports_service.get_audit_log(
-        db, date_from, date_to, pagination.limit, pagination.offset
+        db, date_from, date_to, pagination.limit, pagination.offset, channel_id, entry_type
     )
     return Page(items=rows, total=total, limit=pagination.limit, offset=pagination.offset)
 

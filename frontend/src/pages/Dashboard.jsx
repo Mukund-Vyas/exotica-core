@@ -10,22 +10,25 @@ import {
 } from "../api/reports";
 import { getReceivablesAging } from "../api/transactions";
 import { Card, Loader } from "../components/ui/Surfaces";
-import { formatCurrency, formatNumber, formatPercent } from "../utils/currency";
+import { formatCurrency, formatNumber, formatPercent, signClass } from "../utils/currency";
+import { monthToDateRange } from "../utils/dates";
 
-function monthRange() {
-  const now = new Date();
-  const from = new Date(now.getFullYear(), now.getMonth(), 1);
-  return { dateFrom: from.toISOString().slice(0, 10), dateTo: now.toISOString().slice(0, 10) };
-}
 
 function SectionLabel({ children }) {
   return <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-taupe-dark">{children}</p>;
 }
 
-function DashboardCard({ title, isLoading, children, linkTo, linkLabel }) {
+function DashboardCard({ title, isLoading, isError, children, linkTo, linkLabel }) {
   return (
     <Card title={title}>
-      {isLoading ? <Loader /> : children}
+      {isLoading ? (
+        <Loader />
+      ) : isError ? (
+        // A failed request must not read as good news (“no dead stock — nice work”).
+        <p className="text-sm text-danger">Couldn’t load this right now.</p>
+      ) : (
+        children
+      )}
       {linkTo && (
         <Link to={linkTo} className="mt-3 inline-block text-sm text-brand underline">
           {linkLabel} →
@@ -36,7 +39,7 @@ function DashboardCard({ title, isLoading, children, linkTo, linkLabel }) {
 }
 
 export default function Dashboard() {
-  const { dateFrom, dateTo } = monthRange();
+  const { dateFrom, dateTo } = monthToDateRange();
 
   const pnlQuery = useQuery({
     queryKey: ["dashboard-channel-pnl", dateFrom, dateTo],
@@ -55,11 +58,14 @@ export default function Dashboard() {
     queryFn: () => getPerformance({ dateFrom, dateTo, metric: "revenue", descending: true, limit: 1 }),
   });
 
-  const bestChannel = pnlQuery.data
-    ?.filter((r) => r.revenue > 0)
+  const bestChannel = (pnlQuery.data ?? [])
+    .filter((r) => Number(r.revenue) > 0)
     .sort((a, b) => Number(b.net_profit) - Number(a.net_profit))[0];
 
-  const agingBucketCount = (bucket) => agingQuery.data?.rows?.filter((r) => r.aging_bucket === bucket).length ?? 0;
+  // The question this card answers is “how much is badly overdue, and from whom”.
+  const severeRows = (agingQuery.data?.rows ?? []).filter((r) => r.aging_bucket === "60+ Days");
+  const severeAmount = agingQuery.data?.bucket_totals?.["60+ Days"] ?? 0;
+  const severeParties = new Set(severeRows.map((r) => r.party_id || r.party_name)).size;
 
   const stale90Count = inventoryAgingQuery.data?.rows?.filter((r) => r.aging_bucket === "90+").length ?? 0;
 
@@ -76,6 +82,7 @@ export default function Dashboard() {
         <DashboardCard
           title="Most profitable channel"
           isLoading={pnlQuery.isLoading}
+          isError={pnlQuery.isError}
           linkTo="/reports/channel-pnl"
           linkLabel="View full channel P&L"
         >
@@ -83,7 +90,7 @@ export default function Dashboard() {
             <div>
               <p className="font-display text-2xl font-semibold text-brand">{bestChannel.channel_name}</p>
               <p className="mt-1 text-sm text-taupe">
-                Net profit {formatCurrency(bestChannel.net_profit)} · Margin{" "}
+                Net profit <span className={signClass(bestChannel.net_profit)}>{formatCurrency(bestChannel.net_profit)}</span> · Margin{" "}
                 {formatPercent(bestChannel.margin_pct)}
               </p>
             </div>
@@ -95,18 +102,24 @@ export default function Dashboard() {
         <DashboardCard
           title="B2B receivables outstanding"
           isLoading={agingQuery.isLoading}
+          isError={agingQuery.isError}
           linkTo="/receivables/aging"
           linkLabel="View aging report"
         >
           <p className="font-display text-2xl font-semibold text-danger">
             {formatCurrency(agingQuery.data?.total_outstanding)}
           </p>
-          <p className="mt-1 text-sm text-taupe">{agingBucketCount("60+ Days")} party(ies) 60+ days overdue</p>
+          <p className={`mt-1 text-sm ${severeRows.length ? "font-medium text-danger" : "text-taupe"}`}>
+            {severeRows.length
+              ? `${formatCurrency(severeAmount)} is 60+ days overdue (${severeParties} ${severeParties === 1 ? "party" : "parties"})`
+              : "Nothing is 60+ days overdue."}
+          </p>
         </DashboardCard>
 
         <DashboardCard
           title="Total inventory valuation"
           isLoading={valuationQuery.isLoading}
+          isError={valuationQuery.isError}
           linkTo="/reports/inventory-valuation"
           linkLabel="View inventory valuation"
         >
@@ -123,6 +136,7 @@ export default function Dashboard() {
         <DashboardCard
           title="Capital blocked in dead stock"
           isLoading={deadStockQuery.isLoading}
+          isError={deadStockQuery.isError}
           linkTo="/reports/dead-stock"
           linkLabel="View dead stock report"
         >
@@ -144,6 +158,7 @@ export default function Dashboard() {
         <DashboardCard
           title="Inventory aging summary"
           isLoading={inventoryAgingQuery.isLoading}
+          isError={inventoryAgingQuery.isError}
           linkTo="/reports/inventory-aging"
           linkLabel="View inventory aging"
         >
@@ -160,6 +175,7 @@ export default function Dashboard() {
         <DashboardCard
           title="Purchase triggers"
           isLoading={purchaseTriggersQuery.isLoading}
+          isError={purchaseTriggersQuery.isError}
           linkTo="/reports/purchase-triggers"
           linkLabel="View purchase triggers"
         >
@@ -185,6 +201,7 @@ export default function Dashboard() {
         <DashboardCard
           title="Top-selling SKU this month"
           isLoading={topSellerQuery.isLoading}
+          isError={topSellerQuery.isError}
           linkTo="/reports/performance"
           linkLabel="View full performance report"
         >

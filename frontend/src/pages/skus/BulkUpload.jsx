@@ -9,7 +9,13 @@ import { getErrorInfo } from "../../utils/errorCodes";
 
 function downloadErrorsAsCsv(errors) {
   const header = "row_number,code,error_code,detail";
-  const escape = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
+  // Prefix cells that start with =, +, -, @ so Excel/Sheets treat user-supplied text
+  // (e.g. a SKU code from the uploaded file) as text, never as a formula.
+  const escape = (v) => {
+    let text = String(v ?? "");
+    if (/^[=+\-@\t\r]/.test(text)) text = `'${text}`;
+    return `"${text.replace(/"/g, '""')}"`;
+  };
   const lines = errors.map((e) => [e.row_number, e.code, e.error_code, e.detail].map(escape).join(","));
   const csv = [header, ...lines].join("\n");
   const url = window.URL.createObjectURL(new Blob([csv], { type: "text/csv" }));

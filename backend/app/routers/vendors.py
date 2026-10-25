@@ -2,15 +2,29 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db import get_db
+from app.core.exceptions import NotFoundError
 from app.dependencies.pagination import PaginationParams, pagination_params
 from app.dependencies.permissions import require_permission
 from app.models.user import User
 from app.models.vendor import Vendor
 from app.schemas.common import Page
+from app.schemas.types import UUIDStr
 from app.schemas.vendor import VendorCreate, VendorRead, VendorUpdate
 from app.services.vendors import create_vendor, list_vendors, update_vendor
 
 router = APIRouter(prefix="/api/v1/vendors", tags=["vendors"])
+
+
+@router.get("/{vendor_id}", response_model=VendorRead)
+async def get_vendor(
+    vendor_id: UUIDStr,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_permission("vendors:read")),
+) -> Vendor:
+    vendor = await db.get(Vendor, vendor_id)
+    if vendor is None:
+        raise NotFoundError(f"Vendor {vendor_id} not found")
+    return vendor
 
 
 @router.get("/", response_model=Page[VendorRead])
@@ -42,7 +56,7 @@ async def post_vendor(
 
 @router.patch("/{vendor_id}", response_model=VendorRead)
 async def patch_vendor(
-    vendor_id: str,
+    vendor_id: UUIDStr,
     payload: VendorUpdate,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_permission("vendors:write")),

@@ -10,7 +10,7 @@ from app.models.product import (  # noqa: F401
     SKU,
 )
 from app.models.party import Party  # noqa: F401
-from app.models.vendor import Vendor  # noqa: F401
+from app.models.vendor import Vendor, VendorSkuMapping  # noqa: F401
 from app.models.settings import SystemSetting  # noqa: F401
 from app.models.transaction import (  # noqa: F401
     Order,
@@ -33,6 +33,7 @@ __all__ = [
     "SKU",
     "Party",
     "Vendor",
+    "VendorSkuMapping",
     "SystemSetting",
     "Order",
     "OrderItem",

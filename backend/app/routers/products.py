@@ -8,11 +8,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db import get_db
 from app.core.exceptions import AppError, ConflictError, NotFoundError
+from app.core.money import like_pattern
+from app.models.vendor import VendorSkuMapping
+from app.services.vendor_sku_mappings import mapped_codes_for
 from app.dependencies.pagination import PaginationParams, pagination_params
 from app.dependencies.permissions import require_permission
 from app.models.product import SKU, Channel
 from app.models.user import User
 from app.schemas.common import Page
+from app.schemas.types import UUIDStr
 from app.schemas.product import (
     BulkSKUUploadResult,
     ChannelCommissionCreate,
@@ -32,6 +36,7 @@ from app.services.pricing import (
 )
 from app.services.products import (
     MAX_ROWS,
+    REQUIRED_COLUMNS,
     TEMPLATE_EXAMPLE_ROW,
     TEMPLATE_HEADERS,
     bulk_create_skus,
@@ -60,7 +65,7 @@ async def create_sku(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_permission("skus:write")),
 ) -> SKU:
-    existing = await db.execute(select(SKU).where(SKU.code == payload.code))
+    existing = await db.execute(select(SKU).where(func.lower(SKU.code) == payload.code.lower()))
     if existing.scalar_one_or_none() is not None:
         raise ConflictError(f"SKU code '{payload.code}' already exists", code="duplicate_sku_code")
 
@@ -75,16 +80,34 @@ async def create_sku(
 async def list_skus(
     is_active: bool | None = None,
     search: str | None = None,
+    vendor_id: UUIDStr | None = None,
     pagination: PaginationParams = Depends(pagination_params),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_permission("skus:read")),
 ) -> Page[SKURead]:
+    """``vendor_id`` makes the search also match that vendor's own codes/names
+    (so a purchase can be keyed from the vendor's invoice) and returns each SKU's
+    vendor code alongside it."""
     query = select(SKU)
     if is_active is not None:
         query = query.where(SKU.is_active == is_active)
     if search:
-        like = f"%{search}%"
-        query = query.where((SKU.code.ilike(like)) | (SKU.name.ilike(like)))
+        like = like_pattern(search)
+        condition = (
+            SKU.code.ilike(like, escape="\\")
+            | SKU.name.ilike(like, escape="\\")
+            | SKU.category.ilike(like, escape="\\")
+            | SKU.size_variant.ilike(like, escape="\\")
+        )
+        if vendor_id:
+            condition = condition | SKU.id.in_(
+                select(VendorSkuMapping.sku_id).where(
+                    VendorSkuMapping.vendor_id == vendor_id,
+                    VendorSkuMapping.vendor_sku_code.ilike(like, escape="\\")
+                    | VendorSkuMapping.vendor_product_name.ilike(like, escape="\\"),
+                )
+            )
+        query = query.where(condition)
 
     total = (await db.execute(select(func.count()).select_from(query.subquery()))).scalar_one()
     rows = (
@@ -92,6 +115,12 @@ async def list_skus(
         .scalars()
         .all()
     )
+    if vendor_id:
+        mapped = await mapped_codes_for(db, vendor_id, [r.id for r in rows])
+        for r in rows:
+            m = mapped.get(r.id)
+            r.vendor_sku_code = m.vendor_sku_code if m else None
+            r.vendor_product_name = m.vendor_product_name if m else None
     return Page(
         items=[SKURead.model_validate(r) for r in rows],
         total=total,
@@ -102,7 +131,7 @@ async def list_skus(
 
 @router.get("/skus/{sku_id}", response_model=SKURead)
 async def get_sku(
-    sku_id: str,
+    sku_id: UUIDStr,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_permission("skus:read")),
 ) -> SKU:
@@ -114,7 +143,7 @@ async def get_sku(
 
 @router.patch("/skus/{sku_id}", response_model=SKURead)
 async def update_sku(
-    sku_id: str,
+    sku_id: UUIDStr,
     payload: SKUUpdate,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_permission("skus:write")),
@@ -165,6 +194,20 @@ async def upload_skus_bulk(
         raise AppError(code="invalid_file", detail="File is not valid UTF-8 text. Please export as CSV (UTF-8).")
 
     reader = csv.DictReader(io.StringIO(text))
+    # Tolerate header differences that people introduce when editing in Excel:
+    # stray spaces/capitals ("Size Variant", " Code ") map to the template names.
+    reader.fieldnames = [
+        (h or "").strip().lower().replace(" ", "_").replace("-", "_") for h in (reader.fieldnames or [])
+    ]
+    missing = [c for c in REQUIRED_COLUMNS if c not in reader.fieldnames]
+    if missing:
+        raise AppError(
+            code="missing_columns",
+            detail=(
+                f"The file is missing required column(s): {', '.join(missing)}. "
+                "Download the template to see the expected headers."
+            ),
+        )
     rows = list(reader)
     if not rows:
         raise AppError(code="empty_file", detail="The uploaded file has no data rows.")
@@ -194,7 +237,7 @@ async def create_channel_price(
 
 @router.get("/skus/{sku_id}/channel-prices", response_model=list[ChannelPriceRead])
 async def get_sku_channel_prices(
-    sku_id: str,
+    sku_id: UUIDStr,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_permission("skus:read")),
 ) -> list[ChannelPriceRead]:
@@ -215,8 +258,8 @@ async def get_sku_channel_prices(
 
 @router.get("/channel-prices/current", response_model=ChannelPriceRead | None)
 async def get_current_channel_price(
-    sku_id: str,
-    channel_id: str,
+    sku_id: UUIDStr,
+    channel_id: UUIDStr,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_permission("skus:read")),
 ) -> ChannelPriceRead | None:

@@ -7,6 +7,7 @@ from app.dependencies.permissions import require_permission
 from app.models.party import Party
 from app.models.user import User
 from app.schemas.common import Page
+from app.schemas.types import UUIDStr
 from app.schemas.party import PartyCreate, PartyRead, PartyUpdate
 from app.services.parties import create_party, list_parties, update_party
 
@@ -42,7 +43,7 @@ async def post_party(
 
 @router.patch("/{party_id}", response_model=PartyRead)
 async def patch_party(
-    party_id: str,
+    party_id: UUIDStr,
     payload: PartyUpdate,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_permission("parties:write")),

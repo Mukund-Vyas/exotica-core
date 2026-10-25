@@ -14,15 +14,16 @@ trigger either.
 """
 import math
 from dataclasses import dataclass
-from datetime import date, timedelta
+from datetime import timedelta
 from decimal import ROUND_HALF_UP, Decimal
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.timeutil import today_local
 from app.models.product import SKU
-from app.models.settings import SystemSetting
 from app.models.transaction import Order, OrderItem, Purchase, PurchaseItem, Return
+from app.services.settings import get_int_setting
 from app.schemas.reports import (
     AgingBucket,
     FastMoverRow,
@@ -40,10 +41,7 @@ TARGET_COVERAGE_DAYS_KEY = "target_coverage_days"
 DEFAULT_LEAD_TIME_DAYS_KEY = "default_lead_time_days"
 
 
-async def _get_int_setting(db: AsyncSession, key: str, default: int) -> int:
-    result = await db.execute(select(SystemSetting.value).where(SystemSetting.key == key))
-    value = result.scalar_one_or_none()
-    return int(value) if value is not None else default
+_get_int_setting = get_int_setting
 
 
 def _aging_bucket(days: int) -> AgingBucket:
@@ -70,12 +68,12 @@ async def get_inventory_aging_report(db: AsyncSession) -> InventoryAgingReport:
     last_purchase_by_sku = {row.sku_id: row.last_purchase_date for row in (await db.execute(last_purchase_q)).all()}
 
     skus = (
-        (await db.execute(select(SKU).where(SKU.is_active.is_(True), SKU.current_stock_qty > 0)))
+        (await db.execute(select(SKU).where(SKU.current_stock_qty > 0).order_by(SKU.code)))
         .scalars()
         .all()
     )
 
-    today = date.today()
+    today = today_local()
     rows: list[InventoryAgingRow] = []
     for sku in skus:
         # FR-G1 acceptance criteria: a SKU never repurchased since initial
@@ -113,7 +111,10 @@ class _AdsEntry:
 async def _compute_ads(db: AsyncSession, window_days: int) -> dict[str, _AdsEntry]:
     """Units sold per active SKU in the last `window_days`, net of returns in the
     same window (a returned unit wasn't really "sold" for velocity purposes)."""
-    cutoff = date.today() - timedelta(days=window_days)
+    # The window is the last `window_days` calendar days *including today*, so
+    # it starts window_days-1 days back. (Using `window_days` back would count
+    # N+1 days of sales but still divide by N, overstating daily sales.)
+    cutoff = today_local() - timedelta(days=window_days - 1)
 
     sold_q = (
         select(OrderItem.sku_id, func.coalesce(func.sum(OrderItem.quantity), 0).label("qty"))
@@ -157,7 +158,8 @@ async def _fast_mover_ids(
     depends on this: a trigger requires "AND flagged fast-moving")."""
     if not ads_entries:
         return []
-    ranked = sorted(ads_entries.values(), key=lambda e: e.units_sold, reverse=True)
+    ranked = sorted(ads_entries.values(), key=lambda e: e.sku.code)
+    ranked.sort(key=lambda e: e.units_sold, reverse=True)
     cutoff_count = max(1, math.ceil(len(ranked) * (top_percentile / 100)))
     return [e.sku.id for e in ranked[:cutoff_count]]
 
@@ -187,6 +189,7 @@ async def get_fast_movers_report(db: AsyncSession, default_window_days: int, def
         for sku_id, entry in ads_entries.items()
         if sku_id in fast_mover_ids
     ]
+    rows.sort(key=lambda r: r.sku_code)
     rows.sort(key=lambda r: r.units_sold_in_window, reverse=True)
     return FastMoversReport(window_days=window_days, top_percentile=top_percentile, rows=rows)
 
@@ -203,7 +206,7 @@ async def _last_vendor_by_sku(db: AsyncSession, sku_ids: list[str]) -> dict[str,
         select(PurchaseItem.sku_id, Purchase.vendor, Purchase.purchase_date)
         .join(Purchase, Purchase.id == PurchaseItem.purchase_id)
         .where(PurchaseItem.sku_id.in_(sku_ids))
-        .order_by(PurchaseItem.sku_id, Purchase.purchase_date.desc())
+        .order_by(PurchaseItem.sku_id, Purchase.purchase_date.desc(), Purchase.created_at.desc())
     )
     result: dict[str, str] = {}
     for row in (await db.execute(q)).all():
@@ -258,7 +261,8 @@ async def get_purchase_triggers_report(
             )
         )
 
-    rows.sort(key=lambda r: (r.days_of_stock_remaining is None, r.days_of_stock_remaining))
+    rows.sort(key=lambda r: r.sku_code)
+    rows.sort(key=lambda r: (r.days_of_stock_remaining is None, r.days_of_stock_remaining or Decimal(0)))
     total_value = sum(
         (Decimal(r.suggested_purchase_qty) * fast_movers[r.sku_id].sku.current_avg_cost for r in rows),
         Decimal("0"),

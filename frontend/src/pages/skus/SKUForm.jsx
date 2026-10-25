@@ -2,7 +2,8 @@ import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
+import { listVendorMappings } from "../../api/vendorMappings";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   createSku,
@@ -16,18 +17,31 @@ import { Card, ErrorBanner, Loader } from "../../components/ui/Surfaces";
 import { Field, Input, Select, Checkbox } from "../../components/ui/Field";
 import Button from "../../components/ui/Button";
 import { formatCurrency } from "../../utils/currency";
+import { invalidateBusinessData } from "../../utils/invalidate";
+import { isPositiveMoney } from "../../utils/numbers";
 import { getErrorInfo } from "../../utils/errorCodes";
 
+const required = (label, max) =>
+  z.string().trim().min(1, `${label} is required`).max(max, `${label} must be ${max} characters or fewer`);
+
 const schema = z.object({
-  code: z.string().min(1, "Code is required").max(50),
-  name: z.string().min(1, "Name is required").max(200),
-  category: z.string().min(1, "Category is required").max(100),
-  size_variant: z.string().min(1, "Size / variant is required").max(50),
+  code: required("Code", 50),
+  name: required("Name", 200),
+  category: required("Category", 100),
+  size_variant: required("Size / variant", 50),
   is_active: z.boolean().optional(),
-  lead_time_days: z
-    .union([z.string().length(0), z.coerce.number().int().min(0, "Must be 0 or more")])
-    .optional()
-    .transform((v) => (v === "" || v === undefined ? null : v)),
+  // Blank means "use the site-wide default" and is sent as null. The API returns
+  // null for it too — `z.coerce.number()` turns null into 0, which used to silently
+  // change "default" into "0 days" every time any SKU edit was saved.
+  lead_time_days: z.preprocess(
+    (v) => (v === null || v === undefined || (typeof v === "string" && v.trim() === "") ? null : v),
+    z.coerce
+      .number({ invalid_type_error: "Enter a whole number" })
+      .int("Enter a whole number")
+      .min(0, "Must be 0 or more")
+      .max(365, "Must be 365 or fewer")
+      .nullable()
+  ),
 });
 
 export default function SKUForm() {
@@ -36,6 +50,7 @@ export default function SKUForm() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [error, setError] = useState("");
+  const [saved, setSaved] = useState(false);
 
   const skuQuery = useQuery({
     queryKey: ["sku", skuId],
@@ -57,20 +72,22 @@ export default function SKUForm() {
   } = useForm({ resolver: zodResolver(schema), defaultValues: { is_active: true } });
 
   useEffect(() => {
-    if (skuQuery.data) reset(skuQuery.data);
+    if (skuQuery.data) reset({ ...skuQuery.data, lead_time_days: skuQuery.data.lead_time_days ?? "" });
   }, [skuQuery.data, reset]);
 
   const saveMutation = useMutation({
     mutationFn: (values) => (isEdit ? updateSku(skuId, values) : createSku(values)),
     onSuccess: (sku) => {
-      queryClient.invalidateQueries({ queryKey: ["skus"] });
+      invalidateBusinessData(queryClient);
       if (!isEdit) navigate(`/skus/${sku.id}`, { replace: true });
+      else setSaved(true);
     },
     onError: (err) => setError(getErrorInfo(err).message),
   });
 
   function onSubmit(values) {
     setError("");
+    setSaved(false);
     saveMutation.mutate(values);
   }
 
@@ -84,7 +101,12 @@ export default function SKUForm() {
 
       <Card title="Product details">
         <ErrorBanner message={error} />
-        <form onSubmit={handleSubmit(onSubmit)} className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        {saved && (
+          <div role="status" className="mb-4 rounded-sm border border-success/30 bg-success-bg px-4 py-3 text-sm text-success">
+            Changes saved.
+          </div>
+        )}
+        <form onSubmit={handleSubmit(onSubmit)} onChange={() => saved && setSaved(false)} className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="SKU code" required error={errors.code?.message}>
             <Input {...register("code")} disabled={isEdit} placeholder="e.g. BR-1024-BLK-32B" />
           </Field>
@@ -102,7 +124,7 @@ export default function SKUForm() {
             error={errors.lead_time_days?.message}
             hint="How long a reorder takes to arrive from this SKU's vendor. Leave blank to use the site-wide default (Settings)."
           >
-            <Input type="number" min="0" {...register("lead_time_days")} placeholder="e.g. 7" />
+            <Input type="number" min="0" max="365" step="1" inputMode="numeric" {...register("lead_time_days")} placeholder="e.g. 7" />
           </Field>
           {isEdit && (
             <div className="sm:col-span-2">
@@ -125,9 +147,44 @@ export default function SKUForm() {
             currentPrices={pricesQuery.data}
             loading={channelsQuery.isLoading || pricesQuery.isLoading}
           />
+          <div className="mt-6">
+            <VendorCodesCard skuId={skuId} />
+          </div>
         </div>
       )}
     </div>
+  );
+}
+
+function VendorCodesCard({ skuId }) {
+  const { data, isLoading } = useQuery({
+    queryKey: ["vendor-mappings-by-sku", skuId],
+    queryFn: () => listVendorMappings({ skuId, limit: 100 }),
+  });
+  if (isLoading) return <Loader label="Loading vendor codes…" />;
+  const rows = data?.items ?? [];
+  return (
+    <Card title="Vendor codes">
+      {rows.length === 0 ? (
+        <p className="text-sm text-taupe">
+          No vendor has its own code for this SKU yet. Add them from a vendor’s <Link to="/vendors" className="text-brand underline">SKU codes</Link> page.
+        </p>
+      ) : (
+        <ul className="divide-y divide-taupe-light text-sm">
+          {rows.map((m) => (
+            <li key={m.id} className="flex flex-wrap items-baseline justify-between gap-2 py-2">
+              <span>
+                <Link to={`/vendors/${m.vendor_id}/sku-mapping`} className="font-medium text-brand hover:underline">
+                  {m.vendor_name}
+                </Link>
+                {m.vendor_product_name && <span className="ml-2 text-taupe">{m.vendor_product_name}</span>}
+              </span>
+              <span className="num font-medium text-ink">{m.vendor_sku_code}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </Card>
   );
 }
 
@@ -135,11 +192,12 @@ function ChannelPriceEditor({ skuId, channels, currentPrices, loading }) {
   const queryClient = useQueryClient();
   const [edits, setEdits] = useState({});
   const [error, setError] = useState("");
+  const [savedChannel, setSavedChannel] = useState("");
 
   const priceMutation = useMutation({
     mutationFn: ({ channelId, price }) => setChannelPrice(skuId, channelId, price),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["sku-channel-prices", skuId] });
+      invalidateBusinessData(queryClient);
     },
     onError: (err) => setError(getErrorInfo(err).message),
   });
@@ -149,7 +207,7 @@ function ChannelPriceEditor({ skuId, channels, currentPrices, loading }) {
   const priceByChannel = Object.fromEntries((currentPrices || []).map((p) => [p.channel_id, p]));
 
   return (
-    <Card title="Channel pricing (FR-A2)">
+    <Card title="Channel pricing">
       <p className="mb-4 text-sm text-taupe">
         Set the selling price for each channel. Saving a new price supersedes the old one — history is
         preserved, so past reports don't change retroactively.
@@ -168,6 +226,11 @@ function ChannelPriceEditor({ skuId, channels, currentPrices, loading }) {
                 <p className="text-xs text-taupe">
                   {current ? `Current: ${formatCurrency(current.price)}` : "No price set yet"}
                 </p>
+                {savedChannel === channel.id && (
+                  <p role="status" className="text-xs text-success">
+                    Price updated.
+                  </p>
+                )}
               </div>
               <div className="flex items-center gap-2">
                 <Input
@@ -176,6 +239,8 @@ function ChannelPriceEditor({ skuId, channels, currentPrices, loading }) {
                   min="0.01"
                   placeholder="New price"
                   className="w-32"
+                  inputMode="decimal"
+                  aria-label={`New price for ${channel.name}`}
                   value={edits[channel.id] ?? ""}
                   onChange={(e) => setEdits((prev) => ({ ...prev, [channel.id]: e.target.value }))}
                 />
@@ -185,9 +250,19 @@ function ChannelPriceEditor({ skuId, channels, currentPrices, loading }) {
                   disabled={!edits[channel.id] || priceMutation.isPending}
                   onClick={() => {
                     setError("");
+                    setSavedChannel("");
+                    if (!isPositiveMoney(edits[channel.id])) {
+                      setError(`Enter a price above 0 for ${channel.name} (max 2 decimals).`);
+                      return;
+                    }
                     priceMutation.mutate(
-                      { channelId: channel.id, price: Number(edits[channel.id]) },
-                      { onSuccess: () => setEdits((prev) => ({ ...prev, [channel.id]: "" })) }
+                      { channelId: channel.id, price: edits[channel.id].trim() },
+                      {
+                        onSuccess: () => {
+                          setEdits((prev) => ({ ...prev, [channel.id]: "" }));
+                          setSavedChannel(channel.id);
+                        },
+                      }
                     );
                   }}
                 >

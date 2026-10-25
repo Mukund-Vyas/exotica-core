@@ -16,7 +16,8 @@ from decimal import Decimal
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.exceptions import ConflictError, NotFoundError
+from app.core.exceptions import AppError, ConflictError, NotFoundError
+from app.core.timeutil import today_local
 from app.models.transaction import Order, Payment, Receivable, ReceivableStatus
 from app.models.user import User
 from app.schemas.transaction import PaymentCreate, ReceivableAgingRow, ReceivablesAgingReport
@@ -31,6 +32,15 @@ async def record_payment(
     receivable = result.scalar_one_or_none()
     if receivable is None:
         raise NotFoundError(f"Receivable {receivable_id} not found")
+
+    order = await db.get(Order, receivable.order_id)
+    if order is not None and payload.payment_date < order.order_date:
+        raise AppError(
+            code="payment_before_order",
+            detail=f"The payment date cannot be before the order date ({order.order_date}).",
+        )
+    if receivable.status == ReceivableStatus.CLOSED or receivable.amount_outstanding <= 0:
+        raise ConflictError(detail="This receivable is already fully paid.", code="already_paid")
 
     if payload.amount > receivable.amount_outstanding:
         raise ConflictError(
@@ -69,9 +79,9 @@ def _aging_bucket(days_overdue: int) -> str:
 async def get_receivables_aging(
     db: AsyncSession, as_of: date | None = None, party_id: str | None = None
 ) -> ReceivablesAgingReport:
-    as_of = as_of or date.today()
+    as_of = as_of or today_local()
     query = (
-        select(Receivable, Order.party_id, Order.party_name)
+        select(Receivable, Order.party_id, Order.party_name, Order.order_date)
         .join(Order, Order.id == Receivable.order_id)
         .where(Receivable.status == ReceivableStatus.OPEN, Receivable.amount_outstanding > 0)
     )
@@ -81,7 +91,8 @@ async def get_receivables_aging(
 
     rows: list[ReceivableAgingRow] = []
     total_outstanding = Decimal("0")
-    for receivable, row_party_id, party_name in result.all():
+    bucket_totals = {b: Decimal("0") for b in ("Not Due", "1-30 Days", "31-60 Days", "60+ Days")}
+    for receivable, row_party_id, party_name, order_date in result.all():
         days_overdue = (as_of - receivable.due_date).days
         rows.append(
             ReceivableAgingRow(
@@ -89,6 +100,7 @@ async def get_receivables_aging(
                 order_id=receivable.order_id,
                 party_id=row_party_id,
                 party_name=party_name,
+                order_date=order_date,
                 amount_outstanding=receivable.amount_outstanding,
                 due_date=receivable.due_date,
                 days_overdue=max(days_overdue, 0),
@@ -96,5 +108,8 @@ async def get_receivables_aging(
             )
         )
         total_outstanding += receivable.amount_outstanding
+        bucket_totals[_aging_bucket(days_overdue)] += receivable.amount_outstanding
 
-    return ReceivablesAgingReport(rows=rows, total_outstanding=total_outstanding)
+    return ReceivablesAgingReport(
+        rows=rows, total_outstanding=total_outstanding, bucket_totals=bucket_totals
+    )

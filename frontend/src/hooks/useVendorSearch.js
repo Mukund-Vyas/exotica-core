@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { listVendors } from "../api/vendors";
 
 export function useVendorSearch(query) {
@@ -13,7 +13,7 @@ export function useVendorSearch(query) {
   const { data, isFetching } = useQuery({
     queryKey: ["vendor-search", debounced],
     queryFn: () => listVendors({ search: debounced || undefined, limit: 20 }),
-    keepPreviousData: true,
+    placeholderData: keepPreviousData,
   });
 
   return { vendors: data?.items ?? [], isFetching };

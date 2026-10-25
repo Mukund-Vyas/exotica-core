@@ -4,12 +4,12 @@ import { listChannels } from "../../api/products";
 import { getChannelPnl } from "../../api/reports";
 import DataTable from "../../components/ui/DataTable";
 import { Field, Select, Input } from "../../components/ui/Field";
-import { formatCurrency, formatPercent } from "../../utils/currency";
+import DateRangeFields from "../../components/ui/DateRangeFields";
+import { monthToDateRange, dateRangeError } from "../../utils/dates";
+import { formatCurrency, formatPercent, signClass, sumMoney, marginOf } from "../../utils/currency";
 
 function defaultRange() {
-  const now = new Date();
-  const from = new Date(now.getFullYear(), now.getMonth(), 1);
-  return { dateFrom: from.toISOString().slice(0, 10), dateTo: now.toISOString().slice(0, 10) };
+  return monthToDateRange();
 }
 
 export default function ChannelPnL() {
@@ -22,7 +22,7 @@ export default function ChannelPnL() {
   const { data, isLoading } = useQuery({
     queryKey: ["channel-pnl", dateFrom, dateTo, channelId],
     queryFn: () => getChannelPnl({ dateFrom, dateTo, channelId: channelId || undefined }),
-    enabled: Boolean(dateFrom && dateTo),
+    enabled: Boolean(dateFrom && dateTo) && !dateRangeError(dateFrom, dateTo),
   });
 
   const columns = useMemo(
@@ -31,7 +31,7 @@ export default function ChannelPnL() {
       { accessorKey: "revenue", header: "Revenue", cell: (ctx) => <span className="num">{formatCurrency(ctx.getValue())}</span> },
       { accessorKey: "commission", header: "Commission", cell: (ctx) => <span className="num">{formatCurrency(ctx.getValue())}</span> },
       { accessorKey: "cogs", header: "COGS", cell: (ctx) => <span className="num">{formatCurrency(ctx.getValue())}</span> },
-      { accessorKey: "net_profit", header: "Net Profit", cell: (ctx) => <span className="num font-medium">{formatCurrency(ctx.getValue())}</span> },
+      { accessorKey: "net_profit", header: "Net Profit", cell: (ctx) => <span className={`num font-medium ${signClass(ctx.getValue())}`}>{formatCurrency(ctx.getValue())}</span> },
       { accessorKey: "margin_pct", header: "Margin %", cell: (ctx) => <span className="num">{formatPercent(ctx.getValue())}</span> },
     ],
     []
@@ -46,12 +46,7 @@ export default function ChannelPnL() {
       </p>
 
       <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-3 sm:max-w-xl">
-        <Field label="From">
-          <Input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
-        </Field>
-        <Field label="To">
-          <Input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
-        </Field>
+        <DateRangeFields from={dateFrom} to={dateTo} onFromChange={setDateFrom} onToChange={setDateTo} />
         <Field label="Channel">
           <Select value={channelId} onChange={(e) => setChannelId(e.target.value)}>
             <option value="">All channels</option>
@@ -63,6 +58,30 @@ export default function ChannelPnL() {
           </Select>
         </Field>
       </div>
+
+      {data && data.length > 0 && (
+        <dl className="mb-4 grid grid-cols-2 gap-3 rounded-sm border border-taupe-light bg-white p-4 text-sm sm:grid-cols-5">
+          {[
+            ["Revenue", sumMoney(data, "revenue")],
+            ["Commission", sumMoney(data, "commission")],
+            ["COGS", sumMoney(data, "cogs")],
+            ["Net profit", sumMoney(data, "net_profit")],
+          ].map(([label, value]) => (
+            <div key={label}>
+              <dt className="text-xs uppercase tracking-wide text-taupe">{label} (total)</dt>
+              <dd className={`num text-base font-semibold ${label === "Net profit" ? signClass(value) : "text-ink"}`}>
+                {formatCurrency(value)}
+              </dd>
+            </div>
+          ))}
+          <div>
+            <dt className="text-xs uppercase tracking-wide text-taupe">Margin (total)</dt>
+            <dd className="num text-base font-semibold text-ink">
+              {formatPercent(marginOf(sumMoney(data, "net_profit"), sumMoney(data, "revenue")))}
+            </dd>
+          </div>
+        </dl>
+      )}
 
       <DataTable
         columns={columns}
