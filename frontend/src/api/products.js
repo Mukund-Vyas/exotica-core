@@ -87,3 +87,17 @@ export async function uploadSkusBulk(file) {
   });
   return data; // BulkSKUUploadResult
 }
+
+/** Every active SKU, fetched page by page (the API caps a page at 200). */
+export async function listAllActiveSkus(maxPages = 25) {
+  const pageSize = 200;
+  let offset = 0;
+  const all = [];
+  for (let i = 0; i < maxPages; i += 1) {
+    const page = await listSkus({ isActive: true, limit: pageSize, offset });
+    all.push(...page.items);
+    offset += pageSize;
+    if (offset >= page.total) break;
+  }
+  return all;
+}

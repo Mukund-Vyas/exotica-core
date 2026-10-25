@@ -28,7 +28,10 @@ async def refresh(payload: TokenRefreshRequest, db: AsyncSession = Depends(get_d
     if decoded is None or decoded.get("type") != "refresh":
         raise UnauthorizedError("Invalid refresh token")
 
-    user = await get_user_by_id(db, decoded["sub"])
+    subject = decoded.get("sub")
+    if not subject:
+        raise UnauthorizedError("Invalid refresh token")
+    user = await get_user_by_id(db, subject)
     if user is None or not user.is_active:
         raise UnauthorizedError("User not found or inactive")
 
@@ -40,4 +43,7 @@ async def refresh(payload: TokenRefreshRequest, db: AsyncSession = Depends(get_d
 
 @router.get("/me", response_model=UserRead)
 async def get_me(current_user=Depends(get_current_user)) -> UserRead:
-    return UserRead.model_validate(current_user)
+    me = UserRead.model_validate(current_user)
+    me.role_name = current_user.role.name if current_user.role else None
+    me.permission_codes = sorted(current_user.permission_codes)
+    return me

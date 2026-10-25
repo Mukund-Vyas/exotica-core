@@ -7,6 +7,7 @@ from app.dependencies.permissions import require_permission
 from app.models.user import User
 from app.models.vendor import Vendor
 from app.schemas.common import Page
+from app.schemas.types import UUIDStr
 from app.schemas.vendor import VendorCreate, VendorRead, VendorUpdate
 from app.services.vendors import create_vendor, list_vendors, update_vendor
 
@@ -42,7 +43,7 @@ async def post_vendor(
 
 @router.patch("/{vendor_id}", response_model=VendorRead)
 async def patch_vendor(
-    vendor_id: str,
+    vendor_id: UUIDStr,
     payload: VendorUpdate,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_permission("vendors:write")),

@@ -2,15 +2,18 @@ from datetime import date
 
 from fastapi import APIRouter, Depends
 from sqlalchemy import func, select
+from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db import get_db
-from app.core.exceptions import NotFoundError
+from app.core.exceptions import AppError
 from app.dependencies.pagination import PaginationParams, pagination_params
 from app.dependencies.permissions import require_permission
-from app.models.transaction import Order, Purchase, Receivable
+from app.models.product import SKU
+from app.models.transaction import Order, OrderItem, Purchase, Receivable, ReceivableStatus, Return
 from app.models.user import User
 from app.schemas.common import Page
+from app.schemas.types import UUIDStr
 from app.schemas.transaction import (
     BulkOrderCreate,
     BulkOrderResult,
@@ -30,6 +33,36 @@ from app.services import inventory, orders, receivables, returns
 router = APIRouter(prefix="/api/v1", tags=["transactions"])
 
 
+async def _attach_sku_info(db: AsyncSession, items: list) -> None:
+    """Set display-only sku_code / sku_name on line items (not stored columns)."""
+    ids = {i.sku_id for i in items}
+    if not ids:
+        return
+    skus = {s.id: s for s in (await db.execute(select(SKU).where(SKU.id.in_(ids)))).scalars()}
+    for item in items:
+        sku = skus.get(item.sku_id)
+        item.sku_code = sku.code if sku else None
+        item.sku_name = sku.name if sku else None
+
+
+async def _attach_returned_qty(db: AsyncSession, items: list[OrderItem]) -> None:
+    ids = [i.id for i in items]
+    returned: dict[str, int] = {}
+    if ids:
+        returned = {
+            oid: int(qty)
+            for oid, qty in (
+                await db.execute(
+                    select(Return.order_item_id, func.sum(Return.quantity))
+                    .where(Return.order_item_id.in_(ids))
+                    .group_by(Return.order_item_id)
+                )
+            ).all()
+        }
+    for item in items:
+        item.returned_quantity = returned.get(item.id, 0)
+
+
 # ============================================================================
 # Purchases (FR-B1)
 # ============================================================================
@@ -46,7 +79,7 @@ async def create_purchase(
 
 @router.get("/purchases/", response_model=Page[PurchaseRead])
 async def list_purchases(
-    vendor_id: str | None = None,
+    vendor_id: UUIDStr | None = None,
     pagination: PaginationParams = Depends(pagination_params),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_permission("purchases:read")),
@@ -59,7 +92,8 @@ async def list_purchases(
     rows = (
         (
             await db.execute(
-                query.order_by(Purchase.purchase_date.desc())
+                query.options(selectinload(Purchase.items))
+                .order_by(Purchase.purchase_date.desc(), Purchase.created_at.desc(), Purchase.id)
                 .limit(pagination.limit)
                 .offset(pagination.offset)
             )
@@ -67,8 +101,7 @@ async def list_purchases(
         .scalars()
         .all()
     )
-    for row in rows:
-        await db.refresh(row, attribute_names=["items"])
+    await _attach_sku_info(db, [i for r in rows for i in r.items])
     return Page(
         items=[PurchaseRead.model_validate(r) for r in rows],
         total=total,
@@ -103,15 +136,20 @@ async def create_bulk_orders(
 
 @router.get("/orders/", response_model=Page[OrderRead])
 async def list_orders(
-    channel_id: str | None = None,
-    party_id: str | None = None,
+    channel_id: UUIDStr | None = None,
+    party_id: UUIDStr | None = None,
+    sku_id: UUIDStr | None = None,
     date_from: date | None = None,
     date_to: date | None = None,
     pagination: PaginationParams = Depends(pagination_params),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_permission("orders:read")),
 ) -> Page[OrderRead]:
+    if date_from and date_to and date_from > date_to:
+        raise AppError(code="invalid_date_range", detail="'From' date must be on or before the 'To' date.")
     query = select(Order)
+    if sku_id:
+        query = query.where(Order.items.any(OrderItem.sku_id == sku_id))
     if channel_id:
         query = query.where(Order.channel_id == channel_id)
     if party_id:
@@ -125,14 +163,18 @@ async def list_orders(
     rows = (
         (
             await db.execute(
-                query.order_by(Order.order_date.desc()).limit(pagination.limit).offset(pagination.offset)
+                query.options(selectinload(Order.items))
+                .order_by(Order.order_date.desc(), Order.created_at.desc(), Order.id)
+                .limit(pagination.limit)
+                .offset(pagination.offset)
             )
         )
         .scalars()
         .all()
     )
-    for row in rows:
-        await db.refresh(row, attribute_names=["items"])
+    all_items = [i for r in rows for i in r.items]
+    await _attach_sku_info(db, all_items)
+    await _attach_returned_qty(db, all_items)
     return Page(
         items=[OrderRead.model_validate(r) for r in rows],
         total=total,
@@ -163,25 +205,39 @@ async def create_return(
 
 @router.get("/receivables/", response_model=Page[ReceivableRead])
 async def list_receivables(
-    party_id: str | None = None,
+    party_id: UUIDStr | None = None,
+    status: ReceivableStatus | None = None,
     pagination: PaginationParams = Depends(pagination_params),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_permission("receivables:read")),
 ) -> Page[ReceivableRead]:
-    query = select(Receivable, Order.party_id, Order.party_name).join(Order, Order.id == Receivable.order_id)
+    query = select(Receivable, Order.party_id, Order.party_name, Order.order_date).join(
+        Order, Order.id == Receivable.order_id
+    )
     if party_id:
         query = query.where(Order.party_id == party_id)
+    if status:
+        query = query.where(Receivable.status == status)
 
     total = (await db.execute(select(func.count()).select_from(query.subquery()))).scalar_one()
     rows = (
-        await db.execute(query.order_by(Receivable.due_date.asc()).limit(pagination.limit).offset(pagination.offset))
+        await db.execute(query.order_by(Receivable.due_date.asc(), Receivable.created_at.asc(), Receivable.id).limit(pagination.limit).offset(pagination.offset))
     ).all()
     return Page(
         items=[
-            ReceivableRead.model_validate(
-                {**receivable.__dict__, "party_id": row_party_id, "party_name": party_name}
+            ReceivableRead(
+                id=receivable.id,
+                order_id=receivable.order_id,
+                party_id=row_party_id,
+                party_name=party_name,
+                order_date=order_date,
+                amount_total=receivable.amount_total,
+                amount_outstanding=receivable.amount_outstanding,
+                due_date=receivable.due_date,
+                status=receivable.status,
+                created_at=receivable.created_at,
             )
-            for receivable, row_party_id, party_name in rows
+            for receivable, row_party_id, party_name, order_date in rows
         ],
         total=total,
         limit=pagination.limit,
@@ -192,7 +248,7 @@ async def list_receivables(
 @router.get("/receivables/aging", response_model=ReceivablesAgingReport)
 async def receivables_aging(
     as_of: date | None = None,
-    party_id: str | None = None,
+    party_id: UUIDStr | None = None,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_permission("receivables:read")),
 ) -> ReceivablesAgingReport:
@@ -202,7 +258,7 @@ async def receivables_aging(
 
 @router.post("/receivables/{receivable_id}/payments", response_model=PaymentRead, status_code=201)
 async def create_payment(
-    receivable_id: str,
+    receivable_id: UUIDStr,
     payload: PaymentCreate,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_permission("receivables:write")),

@@ -7,6 +7,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import ConflictError, NotFoundError
+from app.core.money import like_pattern
 from app.models.party import Party
 from app.models.user import User
 from app.schemas.party import PartyCreate, PartyUpdate
@@ -19,7 +20,7 @@ async def list_parties(
     if is_active is not None:
         query = query.where(Party.is_active == is_active)
     if search:
-        query = query.where(Party.name.ilike(f"%{search}%"))
+        query = query.where(Party.name.ilike(like_pattern(search), escape="\\"))
 
     total = (await db.execute(select(func.count()).select_from(query.subquery()))).scalar_one()
     rows = (
@@ -29,7 +30,7 @@ async def list_parties(
 
 
 async def create_party(db: AsyncSession, payload: PartyCreate, current_user: User) -> Party:
-    name = payload.name.strip()
+    name = " ".join(payload.name.split())
 
     # Case-insensitive dedup check up front (nicer error message than the DB's
     # unique-index violation, which is still there as a backstop against races).

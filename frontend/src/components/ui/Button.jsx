@@ -15,12 +15,14 @@ export default function Button({
   variant = "primary",
   size = "md",
   className = "",
+  type = "button", // a bare <button> inside a <form> submits it; make that opt-in
   children,
   ...props
 }) {
   return (
     <button
-      className={`inline-flex items-center justify-center gap-2 rounded-md font-medium transition-colors disabled:cursor-not-allowed ${VARIANTS[variant]} ${SIZES[size]} ${className}`}
+      type={type}
+      className={`inline-flex items-center justify-center gap-2 rounded-md font-medium transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand disabled:cursor-not-allowed ${VARIANTS[variant]} ${SIZES[size]} ${className}`}
       {...props}
     >
       {children}

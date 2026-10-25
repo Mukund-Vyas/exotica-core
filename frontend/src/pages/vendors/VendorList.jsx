@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { usePagedList } from "../../hooks/usePagedList";
 import { createVendor, listVendors, updateVendor } from "../../api/vendors";
 import DataTable from "../../components/ui/DataTable";
 import { Card, Badge, ErrorBanner } from "../../components/ui/Surfaces";
@@ -13,10 +14,9 @@ export default function VendorList() {
   const [name, setName] = useState("");
   const [error, setError] = useState("");
 
-  const { data, isLoading } = useQuery({
-    queryKey: ["vendors", activeOnly],
-    queryFn: () => listVendors({ isActive: activeOnly ? true : undefined, limit: 200 }),
-  });
+  const list = usePagedList(["vendors-admin", activeOnly], ({ limit, offset }) =>
+    listVendors({ isActive: activeOnly ? true : undefined, limit, offset })
+  );
 
   const createMutation = useMutation({
     mutationFn: (n) => createVendor(n),
@@ -107,8 +107,12 @@ export default function VendorList() {
 
       <DataTable
         columns={columns}
-        data={data?.items}
-        isLoading={isLoading}
+        data={list.items}
+        isLoading={list.isLoading}
+        totalCount={list.total}
+        hasMore={list.hasMore}
+        onLoadMore={list.loadMore}
+        isLoadingMore={list.isLoadingMore}
         searchable
         searchPlaceholder="Search vendors…"
         emptyTitle="No vendors yet"

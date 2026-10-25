@@ -1,4 +1,5 @@
 """BRD Section 7 commission formula + FR-A2/A3 history-versioning behavior."""
+import uuid
 from decimal import Decimal
 
 import pytest
@@ -34,7 +35,7 @@ async def test_set_channel_price_supersedes_previous_current_row(db_session, own
     never overwritten in place."""
     from app.models.product import SKU
 
-    sku = SKU(id="sku-1", code="X1", name="n", category="c", size_variant="s")
+    sku = SKU(id=str(uuid.uuid4()), code="X1", name="n", category="c", size_variant="s")
     db_session.add(sku)
     await db_session.flush()
 

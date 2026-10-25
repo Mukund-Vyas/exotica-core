@@ -15,7 +15,8 @@ from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import NotFoundError
-from app.models.product import ChannelCommission, ChannelPrice, CommissionType
+from app.core.money import money
+from app.models.product import SKU, Channel, ChannelCommission, ChannelPrice, CommissionType
 from app.models.user import User
 
 
@@ -37,6 +38,10 @@ async def set_channel_price(
     db: AsyncSession, sku_id: str, channel_id: str, price: Decimal, current_user: User
 ) -> ChannelPrice:
     """Creates a new current price row; supersedes any prior current row for this (sku, channel)."""
+    if await db.get(SKU, sku_id) is None:
+        raise NotFoundError(f"SKU {sku_id} not found")
+    if await db.get(Channel, channel_id) is None:
+        raise NotFoundError(f"Channel {channel_id} not found")
     await db.execute(
         update(ChannelPrice)
         .where(
@@ -75,6 +80,8 @@ async def set_channel_commission(
     value: Decimal,
     current_user: User,
 ) -> ChannelCommission:
+    if await db.get(Channel, channel_id) is None:
+        raise NotFoundError(f"Channel {channel_id} not found")
     await db.execute(
         update(ChannelCommission)
         .where(ChannelCommission.channel_id == channel_id, ChannelCommission.is_current.is_(True))
@@ -99,6 +106,6 @@ def calculate_commission(
     if commission is None:
         return Decimal("0")
     if commission.commission_type == CommissionType.PERCENTAGE:
-        return (revenue * commission.value / Decimal("100")).quantize(Decimal("0.01"))
+        return money(revenue * commission.value / Decimal("100"))
     # FLAT per unit
-    return (Decimal(quantity) * commission.value).quantize(Decimal("0.01"))
+    return money(Decimal(quantity) * commission.value)

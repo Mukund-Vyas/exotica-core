@@ -31,9 +31,9 @@ export async function getPerformance({ dateFrom, dateTo, metric = "revenue", cha
   return data;
 }
 
-export async function getAuditLog({ dateFrom, dateTo, limit = 50, offset = 0 }) {
+export async function getAuditLog({ dateFrom, dateTo, channelId, entryType, limit = 50, offset = 0 }) {
   const { data } = await client.get("/reports/audit-log", {
-    params: { date_from: dateFrom, date_to: dateTo, limit, offset },
+    params: { date_from: dateFrom, date_to: dateTo, channel_id: channelId, entry_type: entryType, limit, offset },
   });
   return data;
 }

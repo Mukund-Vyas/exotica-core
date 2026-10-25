@@ -1,4 +1,5 @@
-import { createContext, useContext, useEffect, useState, useCallback } from "react";
+import { createContext, useContext, useEffect, useState, useCallback, useMemo } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import * as authApi from "../api/auth";
 import {
   setAccessToken,
@@ -11,6 +12,7 @@ import client from "../api/client";
 const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
+  const queryClient = useQueryClient();
   const [user, setUser] = useState(null);
   const [status, setStatus] = useState("loading"); // loading | authenticated | anonymous
 
@@ -51,12 +53,13 @@ export function AuthProvider({ children }) {
     clearTokens();
     setUser(null);
     setStatus("anonymous");
-  }, []);
+    queryClient.clear(); // don't leave one session's business data cached for the next
+  }, [queryClient]);
 
-  const hasPermission = useCallback(
-    (code) => user?.role?.permission_codes?.has?.(code) ?? true,
-    [user]
-  );
+  // The server is the authority and enforces every permission itself; this only
+  // decides what to *show*. It fails closed: no loaded user, no permissions.
+  const permissionSet = useMemo(() => new Set(user?.permission_codes ?? []), [user]);
+  const hasPermission = useCallback((code) => permissionSet.has(code), [permissionSet]);
 
   return (
     <AuthContext.Provider value={{ user, status, login, logout, hasPermission }}>

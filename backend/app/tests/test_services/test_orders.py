@@ -7,6 +7,7 @@ leave an *earlier*, already-succeeded line's changes committed anyway. Root
 cause and fix are in app/core/db.py (search "pysqlite/aiosqlite quirk") — this
 test is what would have caught it.
 """
+import uuid
 from decimal import Decimal
 
 import pytest
@@ -20,7 +21,7 @@ from app.services.pricing import set_channel_commission, set_channel_price
 
 @pytest.mark.asyncio
 async def test_order_pnl_matches_hand_calculation(db_session, owner_user, channel):
-    sku = SKU(id="sku-1", code="X1", name="n", category="c", size_variant="s", current_stock_qty=100)
+    sku = SKU(id=str(uuid.uuid4()), code="X1", name="n", category="c", size_variant="s", current_stock_qty=100)
     db_session.add(sku)
     await db_session.flush()
     sku.current_avg_cost = Decimal("300.0000")
@@ -53,7 +54,7 @@ async def test_order_pnl_matches_hand_calculation(db_session, owner_user, channe
 
 @pytest.mark.asyncio
 async def test_order_rejected_when_stock_insufficient(db_session, owner_user, channel):
-    sku = SKU(id="sku-1", code="X1", name="n", category="c", size_variant="s", current_stock_qty=2)
+    sku = SKU(id=str(uuid.uuid4()), code="X1", name="n", category="c", size_variant="s", current_stock_qty=2)
     db_session.add(sku)
     await db_session.flush()
     await set_channel_price(db_session, sku.id, channel.id, Decimal("500.00"), owner_user)
@@ -76,10 +77,13 @@ async def test_bulk_orders_all_or_nothing_rolls_back_earlier_success(db_session,
     valid and would succeed on its own; order 2 references a nonexistent SKU.
     The whole batch must be rejected, and — critically — order 1's stock
     decrement must NOT persist either."""
-    sku = SKU(id="sku-1", code="X1", name="n", category="c", size_variant="s", current_stock_qty=100)
+    sku = SKU(id=str(uuid.uuid4()), code="X1", name="n", category="c", size_variant="s", current_stock_qty=100)
     db_session.add(sku)
     await db_session.flush()
     await set_channel_price(db_session, sku.id, channel.id, Decimal("100.00"), owner_user)
+    # The batch rolls back the whole transaction on failure, so the fixtures this
+    # test depends on must already be committed (as they would be in production).
+    await db_session.commit()
 
     result = await create_bulk_orders(
         db_session,
@@ -93,7 +97,7 @@ async def test_bulk_orders_all_or_nothing_rolls_back_earlier_success(db_session,
                 OrderCreate(
                     channel_id=channel.id,
                     order_date="2026-07-01",
-                    items=[OrderItemCreate(sku_id="does-not-exist", quantity=1)],
+                    items=[OrderItemCreate(sku_id=str(uuid.uuid4()), quantity=1)],
                 ),
             ]
         ),
@@ -111,7 +115,7 @@ async def test_bulk_orders_all_or_nothing_rolls_back_earlier_success(db_session,
 
 @pytest.mark.asyncio
 async def test_bulk_orders_all_succeed_when_all_valid(db_session, owner_user, channel):
-    sku = SKU(id="sku-1", code="X1", name="n", category="c", size_variant="s", current_stock_qty=100)
+    sku = SKU(id=str(uuid.uuid4()), code="X1", name="n", category="c", size_variant="s", current_stock_qty=100)
     db_session.add(sku)
     await db_session.flush()
     await set_channel_price(db_session, sku.id, channel.id, Decimal("100.00"), owner_user)

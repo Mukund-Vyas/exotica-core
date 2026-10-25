@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { listParties } from "../api/parties";
 
 export function usePartySearch(query) {
@@ -13,7 +13,7 @@ export function usePartySearch(query) {
   const { data, isFetching } = useQuery({
     queryKey: ["party-search", debounced],
     queryFn: () => listParties({ search: debounced || undefined, limit: 20 }),
-    keepPreviousData: true,
+    placeholderData: keepPreviousData,
   });
 
   return { parties: data?.items ?? [], isFetching };

@@ -8,6 +8,9 @@ import Button from "../../components/ui/Button";
 import SkuPicker from "../../components/SkuPicker";
 import { formatCurrency } from "../../utils/currency";
 import { getErrorInfo } from "../../utils/errorCodes";
+import { formatDate, todayISO } from "../../utils/dates";
+import { isPositiveInt } from "../../utils/numbers";
+import { invalidateBusinessData } from "../../utils/invalidate";
 
 export default function ReturnEntry() {
   const queryClient = useQueryClient();
@@ -16,41 +19,46 @@ export default function ReturnEntry() {
   const [sku, setSku] = useState(null);
   const [channelId, setChannelId] = useState("");
   const [quantity, setQuantity] = useState("");
-  const [returnDate, setReturnDate] = useState(new Date().toISOString().slice(0, 10));
+  const [returnDate, setReturnDate] = useState(todayISO());
   const [reason, setReason] = useState("");
   const [orderItemId, setOrderItemId] = useState("");
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(null);
 
-  // Recent orders, filtered client-side to this SKU's lines — there is no
-  // sku_id filter on GET /orders/, so this pulls the most recent window and
-  // narrows in-browser. Fine at current order volumes; would need a backend
-  // filter if order volume grows significantly.
-  const { data: recentOrders, isFetching: loadingOrders } = useQuery({
+  // Sales of this SKU, newest first (filtered on the server, so older sales are
+  // reachable too — this used to scan only the 100 most recent orders).
+  const { data: skuOrders, isFetching: loadingOrders } = useQuery({
     queryKey: ["orders-for-return", sku?.id],
-    queryFn: () => listOrders({ limit: 100 }),
+    queryFn: () => listOrders({ skuId: sku.id, limit: 100 }),
     enabled: Boolean(sku),
   });
 
+  // Only lines with something left to return are offered.
   const matchingLines = useMemo(() => {
-    if (!sku || !recentOrders) return [];
+    if (!sku || !skuOrders) return [];
     const lines = [];
-    recentOrders.items.forEach((order) => {
+    skuOrders.items.forEach((order) => {
       order.items.forEach((item) => {
-        if (item.sku_id === sku.id) {
-          lines.push({ ...item, order_date: order.order_date, channel_id: order.channel_id });
+        const remaining = item.quantity - (item.returned_quantity || 0);
+        if (item.sku_id === sku.id && remaining > 0) {
+          lines.push({ ...item, remaining, order_date: order.order_date, channel_id: order.channel_id });
         }
       });
     });
     return lines;
-  }, [sku, recentOrders]);
+  }, [sku, skuOrders]);
+
+  const selectedLine = matchingLines.find((l) => l.id === orderItemId);
+  // A return must be booked to the channel the item was sold on, otherwise that
+  // channel's P&L is wrong. With a sale line chosen, the channel is not editable.
+  const effectiveChannelId = selectedLine ? selectedLine.channel_id : channelId;
 
   const channelName = (id) => channels?.find((c) => c.id === id)?.name || "—";
 
   const mutation = useMutation({
     mutationFn: createReturn,
     onSuccess: (ret) => {
-      queryClient.invalidateQueries({ queryKey: ["skus"] });
+      invalidateBusinessData(queryClient);
       setSuccess(ret);
       setSku(null);
       setQuantity("");
@@ -64,13 +72,21 @@ export default function ReturnEntry() {
     e.preventDefault();
     setError("");
     setSuccess(null);
-    if (!sku || !channelId || !quantity) {
-      setError("SKU, channel, and quantity are required.");
+    if (!sku || !effectiveChannelId) {
+      setError("Choose a SKU and a channel.");
+      return;
+    }
+    if (!isPositiveInt(quantity)) {
+      setError("Quantity must be a whole number, 1 or more.");
+      return;
+    }
+    if (selectedLine && Number(quantity) > selectedLine.remaining) {
+      setError(`Only ${selectedLine.remaining} unit(s) of that sale can still be returned.`);
       return;
     }
     mutation.mutate({
       sku_id: sku.id,
-      channel_id: channelId,
+      channel_id: effectiveChannelId,
       quantity: Number(quantity),
       return_date: returnDate,
       reason: reason || undefined,
@@ -100,8 +116,12 @@ export default function ReturnEntry() {
                 }}
               />
             </Field>
-            <Field label="Channel" required>
-              <Select value={channelId} onChange={(e) => setChannelId(e.target.value)}>
+            <Field label="Channel" required hint={selectedLine ? "Set by the sale line below." : undefined}>
+              <Select
+                value={effectiveChannelId}
+                disabled={Boolean(selectedLine)}
+                onChange={(e) => setChannelId(e.target.value)}
+              >
                 <option value="">Select…</option>
                 {(channels || []).map((c) => (
                   <option key={c.id} value={c.id}>
@@ -111,10 +131,24 @@ export default function ReturnEntry() {
               </Select>
             </Field>
             <Field label="Quantity" required>
-              <Input type="number" min="1" value={quantity} onChange={(e) => setQuantity(e.target.value)} />
+              <Input
+                type="number"
+                min="1"
+                step="1"
+                max={selectedLine ? selectedLine.remaining : undefined}
+                inputMode="numeric"
+                value={quantity}
+                onChange={(e) => setQuantity(e.target.value)}
+              />
             </Field>
             <Field label="Return date" required>
-              <Input type="date" value={returnDate} onChange={(e) => setReturnDate(e.target.value)} />
+              <Input
+                type="date"
+                value={returnDate}
+                min={selectedLine?.order_date}
+                max={todayISO()}
+                onChange={(e) => setReturnDate(e.target.value)}
+              />
             </Field>
           </div>
 
@@ -122,13 +156,15 @@ export default function ReturnEntry() {
             label="Original order line (recommended)"
             hint="Reversal amounts are exact when a source line is picked. Without one, the reversal is estimated from the current channel price/cost/commission."
           >
-            <Select value={orderItemId} onChange={(e) => setOrderItemId(e.target.value)} disabled={!sku}>
+            <Select value={orderItemId} onChange={(e) => { setOrderItemId(e.target.value); setError(""); }} disabled={!sku}>
               <option value="">No reference — estimate from current price</option>
-              {loadingOrders && <option disabled>Loading recent sales…</option>}
+              {loadingOrders && <option disabled>Loading sales…</option>}
+              {!loadingOrders && sku && matchingLines.length === 0 && <option disabled>No returnable sales found for this SKU</option>}
               {matchingLines.map((line) => (
                 <option key={line.id} value={line.id}>
-                  {line.order_date} · {channelName(line.channel_id)} · Qty {line.quantity} ·{" "}
-                  {formatCurrency(line.selling_price_at_sale)}
+                  {formatDate(line.order_date)} · {channelName(line.channel_id)} · Sold {line.quantity}
+                  {line.returned_quantity ? ` (${line.returned_quantity} already returned)` : ""} ·{" "}
+                  {formatCurrency(line.selling_price_at_sale)} each
                 </option>
               ))}
             </Select>

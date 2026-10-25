@@ -2,8 +2,8 @@ import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { getInventoryValuation } from "../../api/reports";
 import DataTable from "../../components/ui/DataTable";
-import { Card, Loader } from "../../components/ui/Surfaces";
-import { formatCurrency, formatNumber } from "../../utils/currency";
+import { Badge, Card, Loader } from "../../components/ui/Surfaces";
+import { formatCurrency, formatCost, formatNumber } from "../../utils/currency";
 
 export default function InventoryValuation() {
   const { data, isLoading } = useQuery({
@@ -13,10 +13,23 @@ export default function InventoryValuation() {
 
   const columns = useMemo(
     () => [
-      { accessorKey: "sku_code", header: "Code" },
+      {
+        accessorKey: "sku_code",
+        header: "Code",
+        cell: (ctx) => (
+          <span>
+            {ctx.getValue()}
+            {ctx.row.original.is_active === false && (
+              <Badge tone="neutral" className="ml-2">
+                Discontinued
+              </Badge>
+            )}
+          </span>
+        ),
+      },
       { accessorKey: "sku_name", header: "Name" },
       { accessorKey: "stock_qty", header: "Stock Qty", cell: (ctx) => <span className="num">{formatNumber(ctx.getValue())}</span> },
-      { accessorKey: "avg_cost", header: "Avg. Cost", cell: (ctx) => <span className="num">{formatCurrency(ctx.getValue())}</span> },
+      { accessorKey: "avg_cost", header: "Avg. Cost", cell: (ctx) => <span className="num">{formatCost(ctx.getValue())}</span> },
       { accessorKey: "stock_value", header: "Stock Value", cell: (ctx) => <span className="num font-medium">{formatCurrency(ctx.getValue())}</span> },
     ],
     []

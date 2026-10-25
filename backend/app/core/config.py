@@ -38,6 +38,9 @@ class Settings(BaseSettings):
     access_token_expire_minutes: int = 60
     refresh_token_expire_minutes: int = 10080  # 7 days
 
+    # --- Business timezone (see app/core/timeutil.py) ---
+    app_timezone: str = "Asia/Kolkata"
+
     # --- CORS ---
     # Plain comma-separated string from the environment (pydantic-settings tries to
     # JSON-decode `list[str]` env vars directly, which breaks on a plain CSV value —

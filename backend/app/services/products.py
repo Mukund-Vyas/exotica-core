@@ -98,14 +98,22 @@ async def _process_row(
             ),
         )
 
+    limits = {"code": 50, "name": 200, "category": 100, "size_variant": 50}
+    for column, max_len in limits.items():
+        if len((row.get(column) or "").strip()) > max_len:
+            return _RowOutcome(
+                None,
+                _row_error(row_number, code, "value_too_long", f"{column} is longer than {max_len} characters"),
+            )
+
     lead_time_raw = (row.get("lead_time_days") or "").strip()
     try:
         lead_time_days = int(lead_time_raw) if lead_time_raw else None
-        if lead_time_days is not None and lead_time_days < 0:
+        if lead_time_days is not None and not 0 <= lead_time_days <= 365:
             raise ValueError
     except ValueError:
         return _RowOutcome(
-            None, _row_error(row_number, code, "invalid_value", f"lead_time_days '{lead_time_raw}' is not a valid non-negative integer")
+            None, _row_error(row_number, code, "invalid_value", f"lead_time_days '{lead_time_raw}' is not a whole number between 0 and 365")
         )
 
     price_by_channel_id: dict[str, Decimal] = {}
@@ -117,12 +125,12 @@ async def _process_row(
         if channel is None:
             continue  # shouldn't happen with the seeded channel set; don't fail the row over it
         try:
-            price = Decimal(raw_price)
-            if price <= 0:
+            price = Decimal(raw_price.replace(",", ""))
+            if (not price.is_finite()) or price <= 0 or price >= Decimal("10000000") or -price.as_tuple().exponent > 2:
                 raise InvalidOperation
         except InvalidOperation:
             return _RowOutcome(
-                None, _row_error(row_number, code, "invalid_value", f"{column} '{raw_price}' is not a valid positive price")
+                None, _row_error(row_number, code, "invalid_value", f"{column} '{raw_price}' is not a valid positive price (max 2 decimals)")
             )
         price_by_channel_id[channel.id] = price
 
@@ -141,8 +149,9 @@ async def _process_row(
                 await set_channel_price(db, sku.id, channel_id, price, current_user)
     except AppError as exc:
         return _RowOutcome(None, _row_error(row_number, code, exc.code or "creation_failed", exc.detail))
-    except Exception as exc:  # noqa: BLE001 — last-resort catch so one bad row (e.g. a DB-level race) can't 500 the whole upload
-        return _RowOutcome(None, _row_error(row_number, code, "creation_failed", str(exc)))
+    except Exception:  # noqa: BLE001 — last-resort catch so one bad row (e.g. a DB-level race) can't 500 the whole upload
+        # Don't echo raw database/driver text to the user.
+        return _RowOutcome(None, _row_error(row_number, code, "creation_failed", "Could not be saved"))
 
     return _RowOutcome(sku, None)
 

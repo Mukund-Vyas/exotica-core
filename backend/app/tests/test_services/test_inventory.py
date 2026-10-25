@@ -1,5 +1,6 @@
 """BRD Section 7 weighted-average-cost formula + FR-B1 purchase recording."""
 import asyncio
+import uuid
 from decimal import Decimal
 
 import pytest
@@ -28,7 +29,7 @@ def test_weighted_avg_cost_from_zero_stock():
 
 @pytest.mark.asyncio
 async def test_record_purchase_updates_stock_and_wac(db_session, owner_user, vendor):
-    sku = SKU(id="sku-1", code="X1", name="n", category="c", size_variant="s")
+    sku = SKU(id=str(uuid.uuid4()), code="X1", name="n", category="c", size_variant="s")
     db_session.add(sku)
     await db_session.flush()
 
@@ -54,23 +55,29 @@ async def test_record_purchase_updates_stock_and_wac(db_session, owner_user, ven
 
 
 @pytest.mark.asyncio
-async def test_concurrent_purchases_on_same_sku_serialize_correctly(owner_user):
+@pytest.mark.skipif(
+    AsyncSessionLocal.kw["bind"].dialect.name == "sqlite",
+    reason="needs real row-level locks: run with DATABASE_URL pointing at Postgres",
+)
+async def test_concurrent_purchases_on_same_sku_serialize_correctly(db_session, owner_user):
     """Implementation Plan Section 7.2 — SKU row lock. Two 'simultaneous'
     purchases against the same SKU must both land, in some order, never lose
     an update to a race."""
+    await db_session.commit()  # independent sessions below must be able to see the user
+    race_sku_id, race_vendor_id = str(uuid.uuid4()), str(uuid.uuid4())
     async with AsyncSessionLocal() as setup_db:
-        sku = SKU(id="sku-race", code="RACE1", name="n", category="c", size_variant="s")
+        sku = SKU(id=race_sku_id, code="RACE1", name="n", category="c", size_variant="s")
         setup_db.add(sku)
-        race_vendor = Vendor(id="vendor-race", name="Race Vendor", created_by_id=owner_user.id)
+        race_vendor = Vendor(id=race_vendor_id, name="Race Vendor", created_by_id=owner_user.id)
         setup_db.add(race_vendor)
         await setup_db.commit()
 
     async def do_purchase(qty: int, cost: str):
         async with AsyncSessionLocal() as db:
             payload = PurchaseCreate(
-                vendor_id="vendor-race",
+                vendor_id=race_vendor_id,
                 purchase_date="2026-07-01",
-                items=[PurchaseItemCreate(sku_id="sku-race", quantity=qty, unit_cost=Decimal(cost))],
+                items=[PurchaseItemCreate(sku_id=race_sku_id, quantity=qty, unit_cost=Decimal(cost))],
             )
             await record_purchase(db, payload, owner_user)
             await db.commit()
@@ -80,7 +87,7 @@ async def test_concurrent_purchases_on_same_sku_serialize_correctly(owner_user):
     async with AsyncSessionLocal() as check_db:
         from sqlalchemy import select
 
-        result = await check_db.execute(select(SKU).where(SKU.id == "sku-race"))
+        result = await check_db.execute(select(SKU).where(SKU.id == race_sku_id))
         sku = result.scalar_one()
         # Both purchases must be reflected — the whole point of the row lock.
         assert sku.current_stock_qty == 30

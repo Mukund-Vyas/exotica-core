@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { listSkus } from "../api/products";
 
 export function useSkuSearch(query, { activeOnly = true } = {}) {
@@ -14,7 +14,7 @@ export function useSkuSearch(query, { activeOnly = true } = {}) {
     queryKey: ["sku-search", debounced, activeOnly],
     queryFn: () =>
       listSkus({ search: debounced || undefined, isActive: activeOnly ? true : undefined, limit: 25 }),
-    keepPreviousData: true,
+    placeholderData: keepPreviousData,
   });
 
   return { skus: data?.items ?? [], isFetching };

@@ -1,9 +1,17 @@
 from datetime import date, datetime
 from decimal import Decimal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.models.transaction import PaymentTerm, ReceivableStatus
+from app.schemas.types import (
+    PastOrToday,
+    PaymentAmount,
+    Price,
+    Quantity,
+    UnitCostField,
+    UUIDStr,
+)
 
 # ============================================================================
 # Purchases (FR-B1)
@@ -11,21 +19,23 @@ from app.models.transaction import PaymentTerm, ReceivableStatus
 
 
 class PurchaseItemCreate(BaseModel):
-    sku_id: str
-    quantity: int = Field(gt=0)
-    unit_cost: Decimal = Field(gt=0)
+    sku_id: UUIDStr
+    quantity: Quantity
+    unit_cost: UnitCostField
 
 
 class PurchaseCreate(BaseModel):
-    vendor_id: str = Field(description="Vendor master reference (app.services.vendors)")
-    purchase_date: date
-    items: list[PurchaseItemCreate] = Field(min_length=1)
+    vendor_id: UUIDStr = Field(description="Vendor master reference (app.services.vendors)")
+    purchase_date: PastOrToday
+    items: list[PurchaseItemCreate] = Field(min_length=1, max_length=200)
 
 
 class PurchaseItemRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: str
     sku_id: str
+    sku_code: str | None = None  # attached by the router for display; not a stored column
+    sku_name: str | None = None
     quantity: int
     unit_cost: Decimal
     line_total: Decimal
@@ -57,21 +67,21 @@ class OrderItemCreate(BaseModel):
     they are calculated server-side and are structurally impossible to submit.
     """
 
-    sku_id: str
-    quantity: int = Field(gt=0)
-    selling_price_override: Decimal | None = Field(
-        default=None, gt=0, description="Optional manual override for negotiated/discounted sales"
+    sku_id: UUIDStr
+    quantity: Quantity
+    selling_price_override: Price | None = Field(
+        default=None, description="Optional manual override for negotiated/discounted sales"
     )
 
 
 class OrderCreate(BaseModel):
-    channel_id: str
-    order_date: date
-    items: list[OrderItemCreate] = Field(min_length=1)
+    channel_id: UUIDStr
+    order_date: PastOrToday
+    items: list[OrderItemCreate] = Field(min_length=1, max_length=200)
 
     # B2B only
     payment_term: PaymentTerm | None = None
-    party_id: str | None = Field(
+    party_id: UUIDStr | None = Field(
         default=None,
         description="Party master reference (app.services.parties) — required when payment_term is 'credit'",
     )
@@ -82,6 +92,12 @@ class OrderCreate(BaseModel):
         description="If false (default) an order that would take stock negative is rejected. "
         "If true, it is allowed but the response flags which lines went negative.",
     )
+
+    @model_validator(mode="after")
+    def _due_date_not_before_order_date(self) -> "OrderCreate":
+        if self.due_date is not None and self.due_date < self.order_date:
+            raise ValueError("due_date cannot be before the order date")
+        return self
 
 
 class BulkOrderCreate(BaseModel):
@@ -94,7 +110,10 @@ class OrderItemRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: str
     sku_id: str
+    sku_code: str | None = None  # attached by the router for display; not a stored column
+    sku_name: str | None = None
     quantity: int
+    returned_quantity: int = 0  # units already returned against this line (list endpoint only)
     selling_price_at_sale: Decimal
     cost_price_at_sale: Decimal
     commission_amount_at_sale: Decimal
@@ -136,12 +155,12 @@ class BulkOrderResult(BaseModel):
 
 
 class ReturnCreate(BaseModel):
-    sku_id: str
-    channel_id: str
-    quantity: int = Field(gt=0)
-    return_date: date
-    reason: str | None = None
-    order_item_id: str | None = Field(
+    sku_id: UUIDStr
+    channel_id: UUIDStr
+    quantity: Quantity
+    return_date: PastOrToday
+    reason: str | None = Field(default=None, max_length=1000)
+    order_item_id: UUIDStr | None = Field(
         default=None, description="Optional reference to the original order line"
     )
 
@@ -169,8 +188,8 @@ class ReturnRead(BaseModel):
 
 
 class PaymentCreate(BaseModel):
-    amount: Decimal = Field(gt=0)
-    payment_date: date
+    amount: PaymentAmount
+    payment_date: PastOrToday
 
 
 class PaymentRead(BaseModel):
@@ -189,6 +208,7 @@ class ReceivableRead(BaseModel):
     order_id: str
     party_id: str | None = None
     party_name: str | None = None
+    order_date: date | None = None  # joined from the order, for a recognisable reference
     amount_total: Decimal
     amount_outstanding: Decimal
     due_date: date
@@ -201,6 +221,7 @@ class ReceivableAgingRow(BaseModel):
     order_id: str
     party_id: str | None
     party_name: str | None
+    order_date: date | None = None
     amount_outstanding: Decimal
     due_date: date
     days_overdue: int
@@ -210,3 +231,5 @@ class ReceivableAgingRow(BaseModel):
 class ReceivablesAgingReport(BaseModel):
     rows: list[ReceivableAgingRow]
     total_outstanding: Decimal
+    # Exact per-bucket sums (computed server-side, so the UI never adds floats).
+    bucket_totals: dict[str, Decimal] = {}

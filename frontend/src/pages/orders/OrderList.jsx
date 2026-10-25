@@ -3,12 +3,15 @@ import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { listChannels } from "../../api/products";
 import { listOrders } from "../../api/transactions";
+import { usePagedList } from "../../hooks/usePagedList";
+import DateRangeFields from "../../components/ui/DateRangeFields";
 import DataTable from "../../components/ui/DataTable";
-import { Field, Select, Input } from "../../components/ui/Field";
+import { Field, Select } from "../../components/ui/Field";
 import Button from "../../components/ui/Button";
 import PriceOverrideFlag from "../../components/PriceOverrideFlag";
 import PartyPicker from "../../components/PartyPicker";
-import { formatCurrency, formatNumber } from "../../utils/currency";
+import { formatCurrency, formatNumber, signClass } from "../../utils/currency";
+import { formatDate, dateRangeError } from "../../utils/dates";
 
 export default function OrderList() {
   const { data: channels } = useQuery({ queryKey: ["channels"], queryFn: listChannels });
@@ -17,23 +20,26 @@ export default function OrderList() {
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
 
-  const { data, isLoading } = useQuery({
-    queryKey: ["orders", channelId, party?.id, dateFrom, dateTo],
-    queryFn: () =>
+  const rangeInvalid = Boolean(dateRangeError(dateFrom, dateTo));
+  const list = usePagedList(
+    ["orders", channelId, party?.id, dateFrom, dateTo],
+    ({ limit, offset }) =>
       listOrders({
         channelId: channelId || undefined,
         partyId: party?.id,
         dateFrom: dateFrom || undefined,
         dateTo: dateTo || undefined,
-        limit: 200,
+        limit,
+        offset,
       }),
-  });
+    { enabled: !rangeInvalid }
+  );
 
   const channelName = (id) => channels?.find((c) => c.id === id)?.name || "—";
 
   const rows = useMemo(
     () =>
-      (data?.items || []).flatMap((order) =>
+      list.items.flatMap((order) =>
         order.items.map((item) => ({
           ...item,
           order_id: order.id,
@@ -43,14 +49,30 @@ export default function OrderList() {
           payment_term: order.payment_term,
         }))
       ),
-    [data]
+    [list.items]
   );
 
   const columns = useMemo(
     () => [
-      { accessorKey: "order_date", header: "Date" },
+      { accessorKey: "order_date", header: "Date", cell: (ctx) => formatDate(ctx.getValue()) },
+      {
+        id: "sku",
+        header: "SKU",
+        accessorFn: (r) => (r.sku_code ? `${r.sku_code} ${r.sku_name}` : r.sku_id),
+        cell: (ctx) => (
+          <span>
+            <span className="font-medium">{ctx.row.original.sku_code || "—"}</span>
+            <span className="ml-1 text-xs text-taupe">{ctx.row.original.sku_name}</span>
+          </span>
+        ),
+      },
       { accessorFn: (r) => channelName(r.channel_id), header: "Channel", id: "channel" },
       { accessorKey: "quantity", header: "Qty", cell: (ctx) => <span className="num">{formatNumber(ctx.getValue())}</span> },
+      {
+        accessorKey: "returned_quantity",
+        header: "Returned",
+        cell: (ctx) => (ctx.getValue() ? <span className="num text-warning">{formatNumber(ctx.getValue())}</span> : <span className="text-taupe">—</span>),
+      },
       { accessorKey: "selling_price_at_sale", header: "Price", cell: (ctx) => (
           <span className="inline-flex items-center gap-1.5">
             <span className="num">{formatCurrency(ctx.getValue())}</span>
@@ -58,7 +80,7 @@ export default function OrderList() {
           </span>
         ) },
       { accessorKey: "revenue", header: "Revenue", cell: (ctx) => <span className="num">{formatCurrency(ctx.getValue())}</span> },
-      { accessorKey: "net_profit", header: "Net Profit", cell: (ctx) => <span className="num">{formatCurrency(ctx.getValue())}</span> },
+      { accessorKey: "net_profit", header: "Net Profit", cell: (ctx) => <span className={`num ${signClass(ctx.getValue())}`}>{formatCurrency(ctx.getValue())}</span> },
       { accessorKey: "party_name", header: "Party", cell: (ctx) => ctx.getValue() || "—" },
       { accessorKey: "payment_term", header: "Terms", cell: (ctx) => (ctx.getValue() === "credit" ? "Credit" : ctx.getValue() ? "Paid" : "—") },
     ],
@@ -96,18 +118,19 @@ export default function OrderList() {
         <Field label="Party">
           <PartyPicker value={party} onChange={setParty} placeholder="All parties" allowCreate={false} />
         </Field>
-        <Field label="From">
-          <Input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
-        </Field>
-        <Field label="To">
-          <Input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
-        </Field>
+        <DateRangeFields from={dateFrom} to={dateTo} onFromChange={setDateFrom} onToChange={setDateTo} />
       </div>
 
       <DataTable
         columns={columns}
         data={rows}
-        isLoading={isLoading}
+        isLoading={list.isLoading}
+        searchable
+        searchPlaceholder="Search loaded orders…"
+        totalCount={list.total}
+        hasMore={list.hasMore}
+        onLoadMore={list.loadMore}
+        isLoadingMore={list.isLoadingMore}
         emptyTitle="No orders logged yet"
         emptyMessage="Log your first order to start tracking sales and profit."
       />

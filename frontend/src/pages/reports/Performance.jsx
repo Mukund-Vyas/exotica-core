@@ -4,12 +4,12 @@ import { listChannels } from "../../api/products";
 import { getPerformance } from "../../api/reports";
 import DataTable from "../../components/ui/DataTable";
 import { Field, Select, Input } from "../../components/ui/Field";
+import DateRangeFields from "../../components/ui/DateRangeFields";
+import { monthToDateRange, dateRangeError } from "../../utils/dates";
 import { formatCurrency, formatNumber, formatPercent } from "../../utils/currency";
 
 function defaultRange() {
-  const now = new Date();
-  const from = new Date(now.getFullYear(), now.getMonth(), 1);
-  return { dateFrom: from.toISOString().slice(0, 10), dateTo: now.toISOString().slice(0, 10) };
+  return monthToDateRange();
 }
 
 const METRICS = [
@@ -32,7 +32,7 @@ export default function Performance() {
     queryKey: ["performance", dateFrom, dateTo, channelId, metric, descending],
     queryFn: () =>
       getPerformance({ dateFrom, dateTo, channelId: channelId || undefined, metric, descending, limit: 30 }),
-    enabled: Boolean(dateFrom && dateTo),
+    enabled: Boolean(dateFrom && dateTo) && !dateRangeError(dateFrom, dateTo),
   });
 
   const columns = useMemo(
@@ -42,7 +42,7 @@ export default function Performance() {
       { accessorKey: "sku_name", header: "Name" },
       { accessorKey: "quantity_sold", header: "Qty Sold", cell: (ctx) => <span className="num">{formatNumber(ctx.getValue())}</span> },
       { accessorKey: "revenue", header: "Revenue", cell: (ctx) => <span className="num">{formatCurrency(ctx.getValue())}</span> },
-      { accessorKey: "net_profit", header: "Net Profit", cell: (ctx) => <span className="num">{formatCurrency(ctx.getValue())}</span> },
+      { accessorKey: "net_profit", header: "Net Profit", cell: (ctx) => <span className={`num ${signClass(ctx.getValue())}`}>{formatCurrency(ctx.getValue())}</span> },
       { accessorKey: "margin_pct", header: "Margin %", cell: (ctx) => <span className="num">{formatPercent(ctx.getValue())}</span> },
     ],
     []
@@ -56,12 +56,7 @@ export default function Performance() {
       <p className="mb-6 text-sm text-taupe">Rank SKUs by revenue, quantity, profit, or margin.</p>
 
       <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-5 sm:max-w-4xl">
-        <Field label="From">
-          <Input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
-        </Field>
-        <Field label="To">
-          <Input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
-        </Field>
+        <DateRangeFields from={dateFrom} to={dateTo} onFromChange={setDateFrom} onToChange={setDateTo} />
         <Field label="Channel">
           <Select value={channelId} onChange={(e) => setChannelId(e.target.value)}>
             <option value="">All channels</option>
