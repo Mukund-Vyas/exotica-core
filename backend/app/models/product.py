@@ -40,7 +40,7 @@ class Channel(Base):
     __tablename__ = "channels"
 
     id: Mapped[str] = mapped_column(UUID(as_uuid=False), primary_key=True, default=_uuid)
-    code: Mapped[str] = mapped_column(String(20), unique=True, nullable=False)  # myntra/zivame/website/b2b
+    code: Mapped[str] = mapped_column(String(20), unique=True, nullable=False)  # myntra/ajio/zivame/website/b2b
     name: Mapped[str] = mapped_column(String(50), nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
 

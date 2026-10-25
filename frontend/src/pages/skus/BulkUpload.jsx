@@ -84,7 +84,7 @@ export default function BulkUpload() {
         <ErrorBanner message={templateError} />
         <p className="mb-3 text-sm text-taupe">
           Required columns: <code className="text-xs">code, name, category, size_variant</code>. Optional:{" "}
-          <code className="text-xs">lead_time_days, myntra_price, zivame_price, website_price, b2b_price</code>. A
+          <code className="text-xs">lead_time_days, myntra_price, ajio_price, zivame_price, website_price, b2b_price</code>. A
           blank price column means "no price set yet for that channel" — same as pricing it individually later.
         </p>
         <Button variant="secondary" onClick={handleTemplateDownload}>

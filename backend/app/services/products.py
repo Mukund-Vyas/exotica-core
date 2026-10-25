@@ -29,9 +29,10 @@ MAX_ROWS = 2000
 
 REQUIRED_COLUMNS = ["code", "name", "category", "size_variant"]
 
-# CSV column -> channel code (Channel rows seeded in 0002_seed_data.py)
+# CSV column -> channel code (Channel rows seeded in 0002_seed_data.py and 0007_add_ajio_channel.py)
 PRICE_COLUMNS = {
     "myntra_price": "myntra",
+    "ajio_price": "ajio",
     "zivame_price": "zivame",
     "website_price": "website",
     "b2b_price": "b2b",
@@ -44,6 +45,7 @@ TEMPLATE_HEADERS = [
     "size_variant",
     "lead_time_days",
     "myntra_price",
+    "ajio_price",
     "zivame_price",
     "website_price",
     "b2b_price",
@@ -55,6 +57,7 @@ TEMPLATE_EXAMPLE_ROW = [
     "32B - Black",
     "7",
     "699.00",
+    "719.00",
     "599.00",
     "799.00",
     "",  # blank is valid — "no price set yet for this channel"
@@ -123,7 +126,18 @@ async def _process_row(
             continue
         channel = channel_by_code.get(channel_code)
         if channel is None:
-            continue  # shouldn't happen with the seeded channel set; don't fail the row over it
+            # Don't silently drop a price the user typed (e.g. ajio_price before the
+            # channel migration has been applied) and report the row as a success.
+            return _RowOutcome(
+                None,
+                _row_error(
+                    row_number,
+                    code,
+                    "channel_not_found",
+                    f"{column} was given but the '{channel_code}' channel doesn't exist yet. "
+                    "Run the latest database migration (alembic upgrade head).",
+                ),
+            )
         try:
             price = Decimal(raw_price.replace(",", ""))
             if (not price.is_finite()) or price <= 0 or price >= Decimal("10000000") or -price.as_tuple().exponent > 2:
