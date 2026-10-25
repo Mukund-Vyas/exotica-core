@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import settings
 from app.core.exceptions import register_exception_handlers
-from app.routers import auth, parties, products, reports, settings as settings_router, transactions, vendors
+from app.routers import auth, parties, products, reports, settings as settings_router, transactions, vendors, vendor_sku_mappings
 
 app = FastAPI(
     title="Exotica Core API",
@@ -25,6 +25,7 @@ app.add_middleware(
 app.include_router(auth.router)
 app.include_router(parties.router)
 app.include_router(vendors.router)
+app.include_router(vendor_sku_mappings.router)
 app.include_router(products.router)
 app.include_router(transactions.router)
 app.include_router(reports.router)

@@ -36,6 +36,7 @@ class PurchaseItemRead(BaseModel):
     sku_id: str
     sku_code: str | None = None  # attached by the router for display; not a stored column
     sku_name: str | None = None
+    vendor_sku_code: str | None = None  # vendor's own code at purchase time (snapshot)
     quantity: int
     unit_cost: Decimal
     line_total: Decimal

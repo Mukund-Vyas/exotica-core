@@ -22,6 +22,7 @@ from app.models.transaction import Purchase, PurchaseItem
 from app.models.user import User
 from app.models.vendor import Vendor
 from app.schemas.transaction import PurchaseCreate
+from app.services.vendor_sku_mappings import mapped_codes_for
 
 
 async def lock_skus(db: AsyncSession, sku_ids: list[str]) -> dict[str, SKU]:
@@ -78,6 +79,7 @@ async def record_purchase(db: AsyncSession, payload: PurchaseCreate, current_use
         raise AppError(code="vendor_inactive", detail=f"Vendor '{vendor.name}' is inactive. Reactivate it first.")
 
     skus = await lock_skus(db, [i.sku_id for i in payload.items])
+    vendor_codes = await mapped_codes_for(db, vendor.id, list(skus))
     for sku in skus.values():
         if not sku.is_active:
             raise AppError(
@@ -114,6 +116,7 @@ async def record_purchase(db: AsyncSession, payload: PurchaseCreate, current_use
                 unit_cost=item.unit_cost,
                 line_total=money(Decimal(item.quantity) * item.unit_cost),
                 resulting_avg_cost=new_avg_cost,
+                vendor_sku_code=(vendor_codes[item.sku_id].vendor_sku_code if item.sku_id in vendor_codes else None),
             )
         )
 

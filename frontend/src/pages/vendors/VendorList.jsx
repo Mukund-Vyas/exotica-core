@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { usePagedList } from "../../hooks/usePagedList";
 import { createVendor, listVendors, updateVendor } from "../../api/vendors";
@@ -51,16 +52,23 @@ export default function VendorList() {
         id: "actions",
         header: "",
         cell: (ctx) => (
-          <Button
-            size="sm"
-            variant="ghost"
-            disabled={toggleMutation.isPending}
+          <span className="flex items-center gap-1">
+            <Link to={`/vendors/${ctx.row.original.id}/sku-mapping`}>
+              <Button size="sm" variant="secondary">
+                SKU codes
+              </Button>
+            </Link>
+            <Button
+              size="sm"
+              variant="ghost"
+              disabled={toggleMutation.isPending}
             onClick={() =>
               toggleMutation.mutate({ id: ctx.row.original.id, is_active: !ctx.row.original.is_active })
             }
           >
-            {ctx.row.original.is_active ? "Deactivate" : "Activate"}
-          </Button>
+              {ctx.row.original.is_active ? "Deactivate" : "Activate"}
+            </Button>
+          </span>
         ),
       },
     ],

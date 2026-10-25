@@ -9,6 +9,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.db import get_db
 from app.core.exceptions import AppError, ConflictError, NotFoundError
 from app.core.money import like_pattern
+from app.models.vendor import VendorSkuMapping
+from app.services.vendor_sku_mappings import mapped_codes_for
 from app.dependencies.pagination import PaginationParams, pagination_params
 from app.dependencies.permissions import require_permission
 from app.models.product import SKU, Channel
@@ -78,21 +80,34 @@ async def create_sku(
 async def list_skus(
     is_active: bool | None = None,
     search: str | None = None,
+    vendor_id: UUIDStr | None = None,
     pagination: PaginationParams = Depends(pagination_params),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_permission("skus:read")),
 ) -> Page[SKURead]:
+    """``vendor_id`` makes the search also match that vendor's own codes/names
+    (so a purchase can be keyed from the vendor's invoice) and returns each SKU's
+    vendor code alongside it."""
     query = select(SKU)
     if is_active is not None:
         query = query.where(SKU.is_active == is_active)
     if search:
         like = like_pattern(search)
-        query = query.where(
+        condition = (
             SKU.code.ilike(like, escape="\\")
             | SKU.name.ilike(like, escape="\\")
             | SKU.category.ilike(like, escape="\\")
             | SKU.size_variant.ilike(like, escape="\\")
         )
+        if vendor_id:
+            condition = condition | SKU.id.in_(
+                select(VendorSkuMapping.sku_id).where(
+                    VendorSkuMapping.vendor_id == vendor_id,
+                    VendorSkuMapping.vendor_sku_code.ilike(like, escape="\\")
+                    | VendorSkuMapping.vendor_product_name.ilike(like, escape="\\"),
+                )
+            )
+        query = query.where(condition)
 
     total = (await db.execute(select(func.count()).select_from(query.subquery()))).scalar_one()
     rows = (
@@ -100,6 +115,12 @@ async def list_skus(
         .scalars()
         .all()
     )
+    if vendor_id:
+        mapped = await mapped_codes_for(db, vendor_id, [r.id for r in rows])
+        for r in rows:
+            m = mapped.get(r.id)
+            r.vendor_sku_code = m.vendor_sku_code if m else None
+            r.vendor_product_name = m.vendor_product_name if m else None
     return Page(
         items=[SKURead.model_validate(r) for r in rows],
         total=total,

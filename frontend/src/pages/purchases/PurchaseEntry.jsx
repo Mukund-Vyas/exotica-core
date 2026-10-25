@@ -1,6 +1,7 @@
 import { useState } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useNavigate } from "react-router-dom";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Link, useNavigate } from "react-router-dom";
+import { listVendorMappings } from "../../api/vendorMappings";
 import { createPurchase } from "../../api/transactions";
 import { Card, ErrorBanner } from "../../components/ui/Surfaces";
 import { Field, Input } from "../../components/ui/Field";
@@ -16,6 +17,30 @@ import { invalidateBusinessData } from "../../utils/invalidate";
 
 function emptyLine() {
   return { key: newKey(), sku: null, quantity: "", unit_cost: "" };
+}
+
+/** Shows the selected vendor's own code for a SKU (or invites adding one). */
+function VendorCodeHint({ vendor, sku }) {
+  const { data, isLoading } = useQuery({
+    queryKey: ["vendor-mappings-for-sku", vendor?.id, sku?.id],
+    queryFn: () => listVendorMappings({ vendorId: vendor.id, skuId: sku.id, limit: 1 }),
+    enabled: Boolean(vendor && sku),
+  });
+  if (!vendor || !sku || isLoading) return null;
+  const mapping = data?.items?.[0];
+  return mapping ? (
+    <p className="mt-1 text-xs text-taupe">
+      {vendor.name}’s code: <span className="font-medium text-ink">{mapping.vendor_sku_code}</span>
+      {mapping.vendor_product_name ? ` · ${mapping.vendor_product_name}` : ""}
+    </p>
+  ) : (
+    <p className="mt-1 text-xs text-taupe">
+      No {vendor.name} code saved for this SKU.{" "}
+      <Link to={`/vendors/${vendor.id}/sku-mapping`} className="text-brand underline" target="_blank" rel="noreferrer">
+        Add one
+      </Link>
+    </p>
+  );
 }
 
 export default function PurchaseEntry() {
@@ -102,7 +127,13 @@ export default function PurchaseEntry() {
               {lines.map((line, idx) => (
                 <div key={line.key} className="grid grid-cols-1 gap-2 rounded-sm border border-taupe-light p-3 sm:grid-cols-[1fr_120px_120px_auto]">
                   <Field label={idx === 0 ? "SKU" : undefined} error={fieldErrors[`${line.key}-sku`]}>
-                    <SkuPicker value={line.sku} onChange={(sku) => updateLine(line.key, { sku })} />
+                    <SkuPicker
+                      value={line.sku}
+                      vendorId={vendor?.id}
+                      placeholder={vendor ? "Search SKU, or the vendor’s code…" : undefined}
+                      onChange={(sku) => updateLine(line.key, { sku })}
+                    />
+                    <VendorCodeHint vendor={vendor} sku={line.sku} />
                   </Field>
                   <Field label={idx === 0 ? "Quantity" : undefined} error={fieldErrors[`${line.key}-qty`]}>
                     <Input

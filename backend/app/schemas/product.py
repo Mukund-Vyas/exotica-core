@@ -63,6 +63,9 @@ class SKURead(BaseModel):
     current_avg_cost: Decimal
     created_at: datetime
     updated_at: datetime
+    # Only populated when listing with ?vendor_id=: that vendor's own code/name.
+    vendor_sku_code: str | None = None
+    vendor_product_name: str | None = None
 
 
 # --- Bulk SKU upload (FR-A4) ---

@@ -42,6 +42,11 @@ export default function PurchaseList() {
           </span>
         ),
       },
+      {
+        accessorKey: "vendor_sku_code",
+        header: "Vendor code",
+        cell: (ctx) => ctx.getValue() || <span className="text-taupe">—</span>,
+      },
       { accessorKey: "quantity", header: "Qty", cell: (ctx) => <span className="num">{formatNumber(ctx.getValue())}</span> },
       { accessorKey: "unit_cost", header: "Unit Cost", cell: (ctx) => <span className="num">{formatCost(ctx.getValue())}</span> },
       { accessorKey: "line_total", header: "Line Total", cell: (ctx) => <span className="num">{formatCurrency(ctx.getValue())}</span> },

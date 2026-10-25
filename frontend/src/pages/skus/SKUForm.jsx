@@ -2,7 +2,8 @@ import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
+import { listVendorMappings } from "../../api/vendorMappings";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   createSku,
@@ -146,9 +147,44 @@ export default function SKUForm() {
             currentPrices={pricesQuery.data}
             loading={channelsQuery.isLoading || pricesQuery.isLoading}
           />
+          <div className="mt-6">
+            <VendorCodesCard skuId={skuId} />
+          </div>
         </div>
       )}
     </div>
+  );
+}
+
+function VendorCodesCard({ skuId }) {
+  const { data, isLoading } = useQuery({
+    queryKey: ["vendor-mappings-by-sku", skuId],
+    queryFn: () => listVendorMappings({ skuId, limit: 100 }),
+  });
+  if (isLoading) return <Loader label="Loading vendor codes…" />;
+  const rows = data?.items ?? [];
+  return (
+    <Card title="Vendor codes">
+      {rows.length === 0 ? (
+        <p className="text-sm text-taupe">
+          No vendor has its own code for this SKU yet. Add them from a vendor’s <Link to="/vendors" className="text-brand underline">SKU codes</Link> page.
+        </p>
+      ) : (
+        <ul className="divide-y divide-taupe-light text-sm">
+          {rows.map((m) => (
+            <li key={m.id} className="flex flex-wrap items-baseline justify-between gap-2 py-2">
+              <span>
+                <Link to={`/vendors/${m.vendor_id}/sku-mapping`} className="font-medium text-brand hover:underline">
+                  {m.vendor_name}
+                </Link>
+                {m.vendor_product_name && <span className="ml-2 text-taupe">{m.vendor_product_name}</span>}
+              </span>
+              <span className="num font-medium text-ink">{m.vendor_sku_code}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </Card>
   );
 }
 

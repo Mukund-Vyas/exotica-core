@@ -11,6 +11,7 @@ import SKUList from "./pages/skus/SKUList";
 import SKUForm from "./pages/skus/SKUForm";
 import BulkUpload from "./pages/skus/BulkUpload";
 import VendorList from "./pages/vendors/VendorList";
+import VendorSkuMappings from "./pages/vendors/VendorSkuMappings";
 import PartyList from "./pages/parties/PartyList";
 import PurchaseEntry from "./pages/purchases/PurchaseEntry";
 import PurchaseList from "./pages/purchases/PurchaseList";
@@ -79,6 +80,7 @@ export default function App() {
         <Route path="skus/:skuId" element={<SKUForm />} />
 
         <Route path="vendors" element={<VendorList />} />
+        <Route path="vendors/:vendorId/sku-mapping" element={<VendorSkuMappings />} />
         <Route path="parties" element={<PartyList />} />
 
         <Route path="purchases" element={<PurchaseList />} />

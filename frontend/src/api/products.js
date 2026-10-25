@@ -5,9 +5,9 @@ export async function listChannels() {
   return data;
 }
 
-export async function listSkus({ isActive, search, limit = 50, offset = 0 } = {}) {
+export async function listSkus({ isActive, search, vendorId, limit = 50, offset = 0 } = {}) {
   const { data } = await client.get("/skus/", {
-    params: { is_active: isActive, search, limit, offset },
+    params: { is_active: isActive, search, vendor_id: vendorId, limit, offset },
   });
   return data; // Page<SKURead>
 }
